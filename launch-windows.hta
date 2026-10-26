@@ -1,0 +1,293 @@
+<html>
+<head>
+<title>RoyalHub Standalone</title>
+<HTA:APPLICATION
+    APPLICATIONNAME="RoyalHub Standalone Launcher"
+    ID="RoyalHubLauncher"
+    BORDER="thin"
+    CAPTION="yes"
+    SHOWINTASKBAR="yes"
+    SINGLEINSTANCE="yes"
+    SYSMENU="yes"
+    SCROLL="no"
+    MAXIMIZEBUTTON="no"
+    MINIMIZEBUTTON="yes"
+/>
+<style>
+  body { font-family: "Segoe UI", Arial, sans-serif; text-align: center; padding: 28px; background: #f4f6fb; }
+  h1 { font-size: 17px; color: #0b1f3a; margin-bottom: 6px; }
+  p { font-size: 12.5px; color: #555; margin: 4px 0; }
+  .row { margin-top: 10px; }
+  button { font-size: 14px; padding: 10px 24px; background: #0b1f3a; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 6px; }
+  button:hover { background: #16305c; }
+  button:disabled { background: #9aa5b8; cursor: default; }
+  #stopBtn { background: #7a1f1f; }
+  #stopBtn:hover { background: #9c2828; }
+  #stopBtn:disabled { background: #9aa5b8; }
+  .secondary { background: #44546f; font-size: 12.5px; padding: 8px 18px; }
+  .secondary:hover { background: #56698a; }
+  .secondary:disabled { background: #9aa5b8; }
+  #status { margin-top: 16px; font-size: 12px; color: #888; min-height: 16px; }
+  #checklist { text-align: left; margin: 14px auto 0; max-width: 380px; font-size: 12px; }
+  #checklist div { margin: 3px 0; }
+  .good { color: #1a7f37; }
+  .bad { color: #b42318; font-weight: 600; }
+  .info { color: #888; }
+  #checklist a { color: #0b1f3a; }
+</style>
+<script language="JScript">
+var isRunning = false;
+var requirementsOk = false;
+var MIN_NODE_VERSION = "22.13.0";
+
+// This .hta's own folder \u2014 document.location.pathname gives something like
+// "/C:/Users/.../RoyalHub_Standalone/launch-windows.hta" (URL-encoded, leading slash).
+function GetScriptDir() {
+    var fso = new ActiveXObject("Scripting.FileSystemObject");
+    var scriptPath = unescape(document.location.pathname);
+    if (scriptPath.charAt(0) === "/") scriptPath = scriptPath.substring(1);
+    scriptPath = scriptPath.replace(/\//g, "\\");
+    return fso.GetParentFolderName(scriptPath);
+}
+
+// Backup/restore never need Node.js at all (just zip/unzip), so they stay
+// enabled based purely on "is the app currently running" \u2014 only Run itself
+// additionally needs requirementsOk (see CheckRequirements below).
+function SetIdleButtons(enabled) {
+    document.getElementById("runBtn").disabled = !(enabled && requirementsOk);
+    document.getElementById("backupBtn").disabled = !enabled;
+    document.getElementById("restoreBtn").disabled = !enabled;
+}
+
+function ParseVersion(v) {
+    var parts = v.split(".");
+    return [parseInt(parts[0], 10) || 0, parseInt(parts[1], 10) || 0, parseInt(parts[2], 10) || 0];
+}
+
+function VersionAtLeast(version, minVersion) {
+    var v = ParseVersion(version), m = ParseVersion(minVersion);
+    for (var i = 0; i < 3; i++) {
+        if (v[i] > m[i]) return true;
+        if (v[i] < m[i]) return false;
+    }
+    return true;
+}
+
+function GetNodeVersion(shell) {
+    try {
+        var p = shell.Exec('cmd /c node -v 2>nul');
+        var out = p.StdOut.ReadAll();
+        if (p.ExitCode !== 0 || !out) return null;
+        return out.replace(/^v/, "").replace(/\s+$/, "");
+    } catch (e) { return null; }
+}
+
+function OpenNodeDownload() {
+    var shell = new ActiveXObject("WScript.Shell");
+    shell.Run("https://nodejs.org", 1, false);
+}
+
+// For re-opening the app after accidentally closing its browser tab \u2014 the
+// app is still running (this just points a browser at it again), so this
+// stays enabled the whole time the app is running, same as Stop.
+function OpenInBrowser() {
+    var shell = new ActiveXObject("WScript.Shell");
+    shell.Run("http://localhost:3000", 1, false);
+}
+
+// Reads version.json directly (separate from the patcher's own one-line
+// result) just to get the human-readable "updated" date for display \u2014
+// the patcher's output only needs to carry version numbers.
+function ReadLocalVersionInfo(scriptDir, fso) {
+    var path = scriptDir + "\\version.json";
+    if (!fso.FileExists(path)) return null;
+    try {
+        var file = fso.OpenTextFile(path, 1);
+        var text = file.ReadAll();
+        file.Close();
+        return JSON.parse(text);
+    } catch (e) { return null; }
+}
+
+// Runs scripts\patch.ps1 synchronously (see that file) and returns its one
+// line of output. It does the whole check-and-apply in one call: compares
+// this copy's version.json against the public release repo (plain HTTPS,
+// no GitHub login involved, works the same for a "git clone" or ZIP
+// install), and if different, backs up data/ first and then patches \u2014
+// so by the time this returns, the app is already current.
+function RunPatcher(shell, scriptDir) {
+    var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + scriptDir + '\\scripts\\patch.ps1"';
+    var p = shell.Exec(cmd);
+    var output = p.StdOut.ReadAll();
+    return output.replace(/\s+$/, "");
+}
+
+// Checks what this computer actually needs before Run is allowed, and shows
+// it plainly instead of letting someone click Run and only find out deep in
+// a scrolling console window. Re-run automatically whenever this window
+// regains focus (see Window_OnFocus), so installing Node.js and switching
+// back here updates the checklist with no extra click needed.
+//
+// The version/update check never permanently blocks Run, even on failure or
+// no internet \u2014 this app is supposed to keep working fully offline, so a
+// failed update check should be visible, not a dead end.
+function CheckRequirements() {
+    var nodeLine = document.getElementById("check-node");
+    var updateLine = document.getElementById("check-update");
+    var shell = new ActiveXObject("WScript.Shell");
+    var fso = new ActiveXObject("Scripting.FileSystemObject");
+    var scriptDir = GetScriptDir();
+
+    nodeLine.innerHTML = '<span class="info">\u23f3 Checking for Node.js...</span>';
+
+    var nodeVersion = GetNodeVersion(shell);
+    if (!nodeVersion) {
+        nodeLine.innerHTML = '<span class="bad">\u2717 Node.js not found.</span> <a href="javascript:OpenNodeDownload()">Click here to install it</a>, then come back to this window.';
+        requirementsOk = false;
+    } else if (!VersionAtLeast(nodeVersion, MIN_NODE_VERSION)) {
+        nodeLine.innerHTML = '<span class="bad">\u2717 Node.js v' + nodeVersion + ' found, but it\'s too old (need v' + MIN_NODE_VERSION + ' or later).</span> <a href="javascript:OpenNodeDownload()">Click here to update it</a>, then come back to this window.';
+        requirementsOk = false;
+    } else {
+        nodeLine.innerHTML = '<span class="good">\u2713 Node.js v' + nodeVersion + ' found \u2014 ready to run.</span>';
+        requirementsOk = true;
+    }
+
+    updateLine.innerHTML = '<span class="info">\u23f3 Checking for updates...</span>';
+    var patchResult = RunPatcher(shell, scriptDir);
+    var info = ReadLocalVersionInfo(scriptDir, fso);
+    var versionText = info ? ("v" + info.version + ", updated " + info.updatedAt.substring(0, 10)) : "unknown version";
+
+    if (patchResult.indexOf("PATCHED:") === 0) {
+        var parts = patchResult.split(":");
+        updateLine.innerHTML = '<span class="good">\u2713 Updated: v' + parts[1] + ' \u2192 v' + parts[2] + '.</span>';
+    } else if (patchResult.indexOf("UP_TO_DATE:") === 0) {
+        updateLine.innerHTML = '<span class="good">\u2713 Up to date (' + versionText + ').</span>';
+    } else if (patchResult.indexOf("CHECK_FAILED") === 0) {
+        updateLine.innerHTML = '<span class="info">\u2139 Could not check for updates (no internet?) \u2014 continuing with ' + versionText + '.</span>';
+    } else if (patchResult.indexOf("PATCH_FAILED:") === 0) {
+        updateLine.innerHTML = '<span class="bad">\u2717 Update failed \u2014 continuing with ' + versionText + '. Contact your IT support person if this keeps happening.</span>';
+    } else {
+        updateLine.innerHTML = '<span class="info">' + versionText + '</span>';
+    }
+
+    SetIdleButtons(!isRunning);
+}
+
+function RunApp() {
+    var stopBtn = document.getElementById("stopBtn");
+    var status = document.getElementById("status");
+    SetIdleButtons(false);
+
+    var shell = new ActiveXObject("WScript.Shell");
+    var scriptDir = GetScriptDir();
+
+    // Run is only clickable once the checklist above confirms Node.js is
+    // present and the app has already been patched to the latest version
+    // (see CheckRequirements) \u2014 no need to re-check either one here.
+    status.innerText = "Starting...";
+
+    // Run (not Exec) so npm install's and the dev server's own output renders
+    // directly in a real, visible console window. Exec always redirects a
+    // child's stdout/stderr to pipes back to this script instead of letting
+    // it reach the screen \u2014 nothing is wrong with the app when that happens,
+    // the window is just blank because its output is going somewhere this
+    // script never reads, not to the console buffer at all. /k (not /c)
+    // keeps that window open even if something in the chain fails, so an
+    // error stays visible instead of the window just closing.
+    // NODE_OPTIONS silences the one-time "SQLite is an experimental feature"
+    // notice from Node's built-in node:sqlite (used for the local database) \u2014
+    // harmless, but not worth it looking like something's wrong on first run.
+    isRunning = true;
+    shell.Run('cmd /k cd /d "' + scriptDir + '" && set NODE_OPTIONS=--disable-warning=ExperimentalWarning && powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\\run-install-with-log.ps1" && npm run dev', 1, false);
+
+    // Opens the browser once the server actually starts responding on port 3000 (npm install's
+    // own time varies a lot run to run, so a fixed delay here would open too early or too late).
+    shell.Run('powershell -NoProfile -WindowStyle Hidden -Command "for ($i=0; $i -lt 120; $i++) { try { (New-Object Net.Sockets.TcpClient(\'localhost\',3000)).Close(); Start-Process \'http://localhost:3000\'; break } catch { Start-Sleep -Milliseconds 1000 } }"', 0, false);
+
+    status.innerText = "Starting \u2014 look for the new window. Click Stop below when you're done.";
+    stopBtn.disabled = false;
+    document.getElementById("openBtn").disabled = false;
+}
+
+function StopApp() {
+    var stopBtn = document.getElementById("stopBtn");
+    var status = document.getElementById("status");
+    stopBtn.disabled = true;
+    document.getElementById("openBtn").disabled = true;
+    status.innerText = "Stopping...";
+
+    var shell = new ActiveXObject("WScript.Shell");
+
+    // Kill whatever is actually listening on port 3000 \u2014 the launch window
+    // is a plain visible console now (see RunApp), not something this script
+    // holds a process handle to, so finding it by what it's doing (serving
+    // port 3000) is more reliable than trying to track it by PID anyway.
+    // Closing that console window by hand works too, same as the .bat/.command.
+    try {
+        shell.Run('cmd /c for /f "tokens=5" %a in (\'netstat -ano ^| findstr :3000 ^| findstr LISTENING\') do taskkill /PID %a /F', 0, true);
+    } catch (e) {}
+    isRunning = false;
+
+    status.innerText = "Stopped. (If the console window is still open, you can also just close it.)";
+    SetIdleButtons(true);
+}
+
+// Backup/restore shell out to the standalone .bat scripts rather than
+// reimplementing their zip/unzip + dialog logic here \u2014 one tested copy of
+// that logic, reachable either from this window or by double-clicking the
+// .bat files directly. Disabled while the app is running (Run/Stop toggles
+// these too): restoring over a database file the running server still has
+// open is the one case worth just not allowing instead of explaining.
+function BackupData() {
+    var status = document.getElementById("status");
+    SetIdleButtons(false);
+    status.innerText = "Backing up \u2014 see the window/dialog that opened...";
+    var shell = new ActiveXObject("WScript.Shell");
+    shell.Run('cmd /c cd /d "' + GetScriptDir() + '" && call backup-data.bat', 1, true);
+    status.innerText = "Backup finished.";
+    SetIdleButtons(true);
+}
+
+function RestoreData() {
+    var status = document.getElementById("status");
+    SetIdleButtons(false);
+    status.innerText = "Restoring \u2014 see the window/dialog that opened...";
+    var shell = new ActiveXObject("WScript.Shell");
+    shell.Run('cmd /c cd /d "' + GetScriptDir() + '" && call restore-data.bat', 1, true);
+    status.innerText = "Restore finished.";
+    SetIdleButtons(true);
+}
+
+function Window_OnLoad() {
+    window.resizeTo(480, 360);
+    CheckRequirements();
+}
+
+// Re-checks when this window regains focus \u2014 e.g. after installing Node.js
+// from the link above and alt-tabbing back \u2014 so the checklist updates on
+// its own instead of needing a separate "check again" button.
+function Window_OnFocus() {
+    if (!isRunning) CheckRequirements();
+}
+</script>
+</head>
+<body onload="Window_OnLoad()" onfocus="Window_OnFocus()">
+<h1>RoyalHub Standalone</h1>
+<p>Checks for updates automatically, then click Run to start the app.</p>
+<p>It will open automatically in your browser.</p>
+<div id="checklist">
+    <div id="check-node"><span class="info">&#9203; Checking this computer...</span></div>
+    <div id="check-update"></div>
+</div>
+<div class="row">
+    <button id="runBtn" onclick="RunApp()" disabled>Run</button>
+    <button id="stopBtn" onclick="StopApp()" disabled>Stop</button>
+    <button id="openBtn" class="secondary" onclick="OpenInBrowser()" disabled>Open in Browser</button>
+</div>
+<div class="row">
+    <button id="backupBtn" class="secondary" onclick="BackupData()">Back Up Data</button>
+    <button id="restoreBtn" class="secondary" onclick="RestoreData()">Restore Data</button>
+</div>
+<div id="status"></div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+@echo off
+cd /d "%~dp0"
+
+powershell -NoProfile -Sta -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Title = 'Pick the RoyalHub-Backup-....zip file'; $f.Filter = 'Zip files (*.zip)|*.zip'; $backupDir = Join-Path (Get-Location) 'backups'; if (Test-Path $backupDir) { $f.InitialDirectory = $backupDir } else { $f.InitialDirectory = (Get-Location) }; if ($f.ShowDialog() -eq 'OK') { Write-Output $f.FileName }" > "%TEMP%\royalhub_restore_picked.txt"
+set /p PICKED=<"%TEMP%\royalhub_restore_picked.txt"
+del "%TEMP%\royalhub_restore_picked.txt" >nul 2>nul
+if "%PICKED%"=="" exit /b 0
+
+powershell -NoProfile -Sta -Command "Add-Type -AssemblyName System.Windows.Forms; $name = Split-Path '%PICKED%' -Leaf; $r = [System.Windows.Forms.MessageBox]::Show('This replaces everything currently in this RoyalHub installation - the database, uploaded photos, and compensation key - with what is inside:' + [Environment]::NewLine + [Environment]::NewLine + $name + [Environment]::NewLine + [Environment]::NewLine + 'This cannot be undone. Continue?', 'RoyalHub Standalone - Restore', 'OKCancel', 'Warning'); if ($r -ne 'OK') { exit 1 }"
+if errorlevel 1 exit /b 0
+
+powershell -NoProfile -Sta -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.Windows.Forms; try { $tmp = Join-Path $env:TEMP ('royalhub_restore_' + [guid]::NewGuid().ToString('N')); Expand-Archive -Path '%PICKED%' -DestinationPath $tmp -Force; if (-not (Test-Path (Join-Path $tmp 'data'))) { [System.Windows.Forms.MessageBox]::Show('That file does not look like a RoyalHub backup - no data folder found inside it.', 'RoyalHub Standalone - Restore', 'OK', 'Error') | Out-Null; Remove-Item $tmp -Recurse -Force; exit 1 }; if (Test-Path 'data') { Remove-Item 'data' -Recurse -Force }; Move-Item (Join-Path $tmp 'data') 'data'; if (Test-Path (Join-Path $tmp '.env.local')) { Move-Item (Join-Path $tmp '.env.local') '.env.local' -Force }; Remove-Item $tmp -Recurse -Force; [System.Windows.Forms.MessageBox]::Show('Data restored. You can now run launch-windows.bat (or launch-windows.hta) as usual.', 'RoyalHub Standalone - Restore', 'OK', 'Information') | Out-Null } catch { [System.Windows.Forms.MessageBox]::Show('Something went wrong during restore.' + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message, 'RoyalHub Standalone - Restore', 'OK', 'Error') | Out-Null; exit 1 }"

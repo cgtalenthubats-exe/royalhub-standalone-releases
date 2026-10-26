@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#0b1f3a;color:#0f172a;-webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+</style>
+</helmet>
+<div style="position:fixed;inset:0;display:flex;flex-direction:column;background:#f1f5f9;overflow:hidden">
+
+  <!-- ====== TOP NAV ====== -->
+  <header style="flex:none;height:56px;background:#0b1f3a;color:#fff;display:flex;align-items:center;gap:28px;padding:0 24px;box-shadow:0 1px 0 rgba(255,255,255,.06)">
+    <div onClick="{{ goHome }}" style="display:flex;align-items:center;gap:9px;cursor:pointer;letter-spacing:.04em">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 18h14l1.2-9.3-4 2.8L12 5l-4.2 6.5-4-2.8L5 18Z" fill="#facc15"/></svg>
+      <span style="font-weight:800;font-size:15px">ROYAL FLUSH</span>
+      <span style="background:rgba(250,204,21,.18);color:#fcd34d;font-size:10px;font-weight:600;padding:2px 6px;border-radius:5px">1.0 beta</span>
+    </div>
+    <nav style="display:flex;align-items:center;gap:2px;font-size:13.5px;font-weight:500">
+      <div onClick="{{ goEmployees }}" style="{{ tabEmployees }}">Employees</div>
+      <div onClick="{{ goPositions }}" style="{{ tabPositions }}">Positions</div>
+      <div onClick="{{ goComparison }}" style="{{ tabComparison }}">Comparison</div>
+      <div onClick="{{ goOrgBanner }}" style="{{ tabOrgBanner }}">Org · By Banner</div>
+      <div onClick="{{ goOrgFunction }}" style="{{ tabOrgFunction }}">Org · By Function</div>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:7px 12px;width:240px;color:#cbd5e1;font-size:13px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+        Search employees, roles…
+      </div>
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1e3a5f,#0b1f3a);border:2px solid #facc15;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fcd34d">RK</div>
+    </div>
+  </header>
+
+  <!-- ====== CONTENT ====== -->
+  <main style="flex:1;min-height:0;overflow:hidden;position:relative">
+
+    <!-- ========== HOME ========== -->
+    <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:22px 28px 18px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:26px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Executive Overview</h1>
+          <p style="font-size:13.5px;color:#64748b;margin-top:3px">Global talent intelligence across all banners – FY2025</p>
+        </div>
+        <div style="font-size:12px;color:#94a3b8">Last synced · 24 Jun 2026, 09:14</div>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:12.5px;font-weight:600;margin-bottom:10px"><span style="width:30px;height:30px;border-radius:9px;background:#eff6ff;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>Active Employees</div>
+          <div class="num" style="font-size:34px;font-weight:800;color:#0b1f3a;line-height:1">26</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:6px">1 resigned this year</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:12.5px;font-weight:600;margin-bottom:10px"><span style="width:30px;height:30px;border-radius:9px;background:#f0fdf4;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>Avg Total Comp</div>
+          <div class="num" style="font-size:34px;font-weight:800;color:#0b1f3a;line-height:1">€142.6k</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:6px">Across all job grades</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:12.5px;font-weight:600;margin-bottom:10px"><span style="width:30px;height:30px;border-radius:9px;background:#fffbeb;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg></span>Banners</div>
+          <div class="num" style="font-size:34px;font-weight:800;color:#0b1f3a;line-height:1">7</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:6px">6 countries · 1 HQ · 1 regional</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:12.5px;font-weight:600;margin-bottom:10px"><span style="width:30px;height:30px;border-radius:9px;background:#faf5ff;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>Functions</div>
+          <div class="num" style="font-size:34px;font-weight:800;color:#0b1f3a;line-height:1">6</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:6px">Leadership · Product · HR · Finance · Mktg · Ops</div>
+        </div>
+      </div>
+
+      <!-- lower: presence + breakdowns -->
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1.55fr 1fr;gap:16px">
+        <!-- global presence -->
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="background:#0b1f3a;color:#fff;padding:11px 18px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+            Global Presence
+          </div>
+          <div style="flex:1;min-height:0;position:relative;background:linear-gradient(180deg,#f8fafc,#f1f5f9)">
+            <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%">
+              <g fill="#cbd9e6" stroke="#b2c4d6" stroke-width="1">
+                <path d="M120,150 L150,115 L210,105 L270,110 L300,128 L295,150 L270,165 L285,185 L290,210 L270,225 L250,240 L255,258 L240,250 L225,225 L210,205 L195,210 L180,195 L165,200 L150,175 L130,165 Z"></path>
+                <path d="M312,70 L352,65 L367,92 L350,116 L320,110 L306,90 Z"></path>
+                <path d="M282,272 L322,266 L337,286 L331,316 L316,360 L301,402 L289,432 L281,400 L279,354 L273,318 L271,290 Z"></path>
+                <path d="M463,136 L470,110 L486,98 L500,101 L515,96 L526,109 L520,126 L536,121 L546,136 L525,151 L505,150 L490,161 L475,150 Z"></path>
+                <path d="M480,170 L520,161 L560,159 L590,175 L601,211 L585,256 L560,300 L536,346 L515,330 L505,290 L495,250 L483,215 L478,190 Z"></path>
+                <path d="M525,120 L560,99 L610,94 L662,79 L722,71 L792,80 L842,100 L866,121 L850,151 L820,166 L780,160 L800,186 L760,196 L720,186 L690,201 L662,186 L640,211 L620,196 L600,170 L575,165 L560,150 L535,145 Z"></path>
+                <path d="M755,200 L800,205 L816,230 L800,256 L775,250 L760,225 Z"></path>
+                <path d="M820,330 L870,320 L920,325 L946,351 L925,381 L880,389 L840,375 L822,355 Z"></path>
+              </g>
+              <sc-for list="{{ mapMarkers }}" as="m" hint-placeholder-count="7">
+                <circle cx="{{ m.cx }}" cy="{{ m.cy }}" r="16" fill="{{ m.glow }}"></circle>
+                <circle cx="{{ m.cx }}" cy="{{ m.cy }}" r="6.5" fill="{{ m.color }}" stroke="#fff" stroke-width="2.5"></circle>
+                <text x="{{ m.labelX }}" y="{{ m.cy }}" text-anchor="{{ m.labelAnchor }}" dominant-baseline="middle" font-family="Plus Jakarta Sans" font-size="17" font-weight="700" fill="#0b1f3a">{{ m.country }}</text>
+                <text x="{{ m.labelX }}" y="{{ m.cy }}" dy="17" text-anchor="{{ m.labelAnchor }}" dominant-baseline="middle" font-family="Plus Jakarta Sans" font-size="13" font-weight="600" fill="#94a3b8">{{ m.hc }} staff · {{ m.tag }}</text>
+              </sc-for>
+            </svg>
+            <div style="position:absolute;left:16px;bottom:14px;display:flex;gap:14px;background:rgba(255,255,255,.85);backdrop-filter:blur(4px);padding:7px 12px;border-radius:9px;border:1px solid #e2e8f0">
+              <span style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#475569"><span style="width:9px;height:9px;border-radius:50%;background:#f59e0b"></span>HQ</span>
+              <span style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#475569"><span style="width:9px;height:9px;border-radius:50%;background:#10b981"></span>Regional</span>
+              <span style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#475569"><span style="width:9px;height:9px;border-radius:50%;background:#3b82f6"></span>Banner</span>
+            </div>
+          </div>
+        </div>
+        <!-- right column -->
+        <div style="display:flex;flex-direction:column;gap:16px;min-height:0">
+          <div style="flex:1;background:#fff;border:1px solid #e2e8f0;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="background:#0b1f3a;color:#fff;padding:11px 18px;font-size:13.5px;font-weight:600">Headcount by Function</div>
+            <div style="flex:1;padding:14px 18px;display:flex;flex-direction:column;justify-content:space-around">
+              <sc-for list="{{ funcBars }}" as="f" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:78px;font-size:12px;font-weight:600;color:#475569;text-align:right">{{ f.name }}</div>
+                  <div style="flex:1;height:10px;background:#f1f5f9;border-radius:6px;overflow:hidden"><div style="{{ f.barStyle }}"></div></div>
+                  <div class="num" style="width:20px;font-size:13px;font-weight:700;color:#0b1f3a">{{ f.count }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="flex:none;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="background:#0b1f3a;color:#fff;padding:11px 18px;font-size:13.5px;font-weight:600">Readiness Pipeline</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);padding:16px 18px;gap:14px">
+              <div style="text-align:center"><div class="num" style="font-size:30px;font-weight:800;color:#16a34a">10</div><div style="font-size:11.5px;color:#64748b;font-weight:600;margin-top:2px">High</div></div>
+              <div style="text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0"><div class="num" style="font-size:30px;font-weight:800;color:#d97706">13</div><div style="font-size:11.5px;color:#64748b;font-weight:600;margin-top:2px">Medium</div></div>
+              <div style="text-align:center"><div class="num" style="font-size:30px;font-weight:800;color:#64748b">4</div><div style="font-size:11.5px;color:#64748b;font-weight:600;margin-top:2px">Low</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ========== EMPLOYEE PROFILE ========== -->
+    <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:18px 28px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div onClick="{{ goEmployees }}" style="cursor:pointer;width:32px;height:32px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></div>
+          <div>
+            <h1 style="font-size:23px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Employee Profile</h1>
+            <p style="font-size:12.5px;color:#64748b;margin-top:1px">Key information, compensation, performance &amp; organizational details</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;color:#334155;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export Profile</button>
+          <button style="display:flex;align-items:center;gap:7px;background:#0b1f3a;border:1px solid #0b1f3a;color:#fff;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>Edit</button>
+        </div>
+      </div>
+
+      <!-- hero strip -->
+      <div style="display:grid;grid-template-columns:1.7fr repeat(5,1fr);gap:14px;margin-bottom:14px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;display:flex;gap:16px;box-shadow:0 1px 2px rgba(15,23,42,.04);position:relative;overflow:hidden">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#0b1f3a,#1e40af)"></div>
+          <div style="width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#1e3a5f,#0b1f3a);display:flex;align-items:center;justify-content:center;color:#fcd34d;font-size:28px;font-weight:800;flex:none;border:3px solid #f1f5f9">AM</div>
+          <div style="flex:1;min-width:0">
+            <h2 style="font-size:21px;font-weight:800;color:#0b1f3a;line-height:1.1">Alex Morgan</h2>
+            <p style="font-size:13.5px;color:#475569;font-weight:600;margin-top:2px">Senior Product Manager</p>
+            <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:12px;color:#64748b">
+              <span style="display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Global Solutions Spain</span>
+              <span style="display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Madrid, Spain</span>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:10px">
+              <span style="background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">Manager</span>
+              <span style="background:#f0fdf4;color:#15803d;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">● Active</span>
+              <span style="background:#fffbeb;color:#b45309;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">Product</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <span style="width:30px;height:30px;border-radius:9px;background:#f0fdf4;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+          <div><div class="num" style="font-size:21px;font-weight:800;color:#0b1f3a;line-height:1">€160k</div><div style="font-size:11px;color:#64748b;font-weight:600;margin-top:3px">Total Comp</div></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <span style="width:30px;height:30px;border-radius:9px;background:#eff6ff;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+          <div><div class="num" style="font-size:21px;font-weight:800;color:#0b1f3a;line-height:1">10.1 yrs</div><div style="font-size:11px;color:#64748b;font-weight:600;margin-top:3px">Years of Service</div></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <span style="width:30px;height:30px;border-radius:9px;background:#faf5ff;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2"><path d="m12 2 3 7 7 .5-5.5 4.5 2 7L12 17l-6.5 4 2-7L2 9.5 9 9Z"/></svg></span>
+          <div><div class="num" style="font-size:21px;font-weight:800;color:#0b1f3a;line-height:1">B+</div><div style="font-size:11px;color:#64748b;font-weight:600;margin-top:3px">FY2025 Grade</div></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <span style="width:30px;height:30px;border-radius:9px;background:#fff1f2;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+          <div><div class="num" style="font-size:21px;font-weight:800;color:#0b1f3a;line-height:1">3</div><div style="font-size:11px;color:#64748b;font-weight:600;margin-top:3px">Direct Reports</div></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <span style="width:30px;height:30px;border-radius:9px;background:#fff7ed;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2 0-2.7a1.9 1.9 0 0 0-3 0ZM12 15l-3-3a22 22 0 0 1 8-11 22 22 0 0 1-5 14ZM9 12H4s.5-3 2-4 5 0 5 0M12 15v5s3-.5 4-2 0-5 0-5"/></svg></span>
+          <div><div class="num" style="font-size:21px;font-weight:800;color:#0b1f3a;line-height:1">High</div><div style="font-size:11px;color:#64748b;font-weight:600;margin-top:3px">Readiness</div></div>
+        </div>
+      </div>
+
+      <!-- lower grid -->
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr 1.15fr .95fr;gap:14px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="background:#0b1f3a;color:#fff;padding:9px 15px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>Personal &amp; Employment</div>
+          <div style="flex:1;padding:4px 15px;display:flex;flex-direction:column;justify-content:space-around;font-size:12.5px">
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Date of Birth</span><span style="font-weight:600;color:#0f172a">15 Mar 1987</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Hire Date</span><span style="font-weight:600;color:#0f172a">01 Jun 2016</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Job Effective Date</span><span style="font-weight:600;color:#0f172a">01 Jan 2022</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Years in Position</span><span style="font-weight:600;color:#0f172a">4.5 yrs</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Job Grade</span><span style="font-weight:600;color:#0f172a">Manager</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Education</span><span style="font-weight:600;color:#0f172a;text-align:right">MBA · IESE</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:#64748b">Certification</span><span style="font-weight:600;color:#0f172a">PMP · PMI</span></div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="background:#0b1f3a;color:#fff;padding:9px 15px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Compensation &amp; Benefits</div>
+          <div style="flex:1;padding:4px 15px;display:flex;flex-direction:column;justify-content:space-around;font-size:12px">
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#475569;font-weight:600">Base Salary</span><span class="num" style="font-weight:700;color:#0f172a">€110,000</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">STI Target</span><span class="num" style="font-weight:600;color:#0f172a">€15,000</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">LTI Target</span><span class="num" style="font-weight:600;color:#0f172a">€25,000</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Other Bonus</span><span class="num" style="font-weight:600;color:#0f172a">€5,000</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Company Car</span><span class="num" style="font-weight:600;color:#0f172a">€7,200</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Private Medical</span><span class="num" style="font-weight:600;color:#0f172a">€2,400</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3.5px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Family Cover</span><span class="num" style="font-weight:600;color:#0f172a">€1,800</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 10px;margin-top:3px;background:#0b1f3a;border-radius:8px"><span style="color:#cbd5e1;font-weight:600">Total Compensation</span><span class="num" style="font-weight:800;color:#facc15">€160,000</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+          <div style="flex:none;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="background:#0b1f3a;color:#fff;padding:9px 15px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg>Performance – Last 5 Years</div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:7px;padding:12px 15px">
+              <sc-for list="{{ perf }}" as="p" hint-placeholder-count="5">
+                <div style="text-align:center">
+                  <div style="font-size:10px;color:#94a3b8;font-weight:600;margin-bottom:5px">{{ p.fy }}</div>
+                  <div style="{{ p.badge }}">{{ p.grade }}</div>
+                  <div style="font-size:9px;color:#94a3b8;margin-top:4px">{{ p.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="flex:1;min-height:0;background:#fff;border:1px solid #e2e8f0;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="background:#0b1f3a;color:#fff;padding:9px 15px;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><circle cx="12" cy="5" r="3"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="19" r="3"/><path d="M12 8v4M12 12H6v4M12 12h6v4"/></svg>Org Snapshot</span><span style="font-size:11px;color:#cbd5e1">Team · 3</span></div>
+            <div style="flex:1;min-height:0;padding:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">
+              <div style="border:1px solid #cbd5e1;border-radius:8px;padding:6px 14px;font-size:11.5px;font-weight:600;color:#475569;background:#f8fafc">Victor Pak · VP Product</div>
+              <div style="width:1px;height:10px;background:#cbd5e1"></div>
+              <div style="border:2px solid #0b1f3a;border-radius:8px;padding:7px 16px;display:flex;align-items:center;gap:9px;background:#fff;box-shadow:0 2px 6px rgba(11,31,58,.12)"><div style="width:26px;height:26px;border-radius:50%;background:#0b1f3a;color:#fcd34d;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">AM</div><div><div style="font-size:12px;font-weight:700;color:#0b1f3a">Alex Morgan</div><div style="font-size:10px;color:#64748b">Senior Product Manager</div></div></div>
+              <div style="width:1px;height:10px;background:#cbd5e1"></div>
+              <div style="display:flex;gap:7px">
+                <div style="border:1px solid #cbd5e1;border-radius:7px;padding:5px 9px;font-size:10px;font-weight:600;color:#475569;background:#f8fafc;text-align:center">Liam Carter<br><span style="color:#94a3b8;font-weight:400">Product Owner</span></div>
+                <div style="border:1px solid #cbd5e1;border-radius:7px;padding:5px 9px;font-size:10px;font-weight:600;color:#475569;background:#f8fafc;text-align:center">Nina Brandt<br><span style="color:#94a3b8;font-weight:400">UX Lead</span></div>
+                <div style="border:1px solid #cbd5e1;border-radius:7px;padding:5px 9px;font-size:10px;font-weight:600;color:#475569;background:#f8fafc;text-align:center">Raj Patel<br><span style="color:#94a3b8;font-weight:400">Business Analyst</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+          <div style="background:#0b1f3a;color:#fff;padding:9px 15px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg>Key Insights</div>
+          <div style="flex:1;padding:12px;display:flex;flex-direction:column;gap:10px">
+            <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#16a34a"><path d="M12 2 9 9l-7 .5 5.5 4.5-2 7L12 17l6.5 4-2-7L22 9.5 15 9Z"/></svg><span style="font-size:12px;font-weight:700;color:#15803d">Top Performer</span></div>
+              <p style="font-size:11px;color:#3f6212;line-height:1.4">Consistently delivers strong results and drives impact across product initiatives.</p>
+            </div>
+            <div style="background:#eff6ff;border:1px solid #dbeafe;border-radius:10px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.3"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/></svg><span style="font-size:12px;font-weight:700;color:#1d4ed8">Leadership Potential</span></div>
+              <p style="font-size:11px;color:#1e40af;line-height:1.4">High potential for future leadership roles; ready within 1–2 years.</p>
+            </div>
+            <div style="background:#faf5ff;border:1px solid #f3e8ff;border-radius:10px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5Z"/></svg><span style="font-size:12px;font-weight:700;color:#7e22ce">Talent Status</span></div>
+              <p style="font-size:11px;color:#6b21a8;line-height:1.4">Core Talent – critical contributor to business success.</p>
+            </div>
+            <div onClick="{{ goComparison }}" style="margin-top:auto;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:700;color:#0b1f3a;cursor:pointer;padding:8px;border-top:1px solid #f1f5f9">View Full Talent Profile <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:10.5px;color:#94a3b8;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:5px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Confidential – For Internal Use Only</div>
+    </div>
+    </sc-if>
+
+    <!-- ========== EMPLOYEES ========== -->
+    <sc-if value="{{ isEmployees }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:22px 28px 18px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:26px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Employees</h1>
+          <p style="font-size:13.5px;color:#64748b;margin-top:3px">26 active · 1 resigned · across 7 banners</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;color:#334155;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export CSV</button>
+          <button style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;color:#334155;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>Import</button>
+          <button style="display:flex;align-items:center;gap:7px;background:#0b1f3a;border:1px solid #0b1f3a;color:#fff;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add Employee</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <div style="flex:1;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:9px 13px;font-size:13px;color:#94a3b8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>Search by name, position, country…</div>
+        <div style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">All Banners <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">All Functions <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">Status <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div style="flex:1;min-height:0;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+        <div style="display:grid;grid-template-columns:2.3fr 1.4fr 1fr .9fr 1fr .8fr .9fr;align-items:center;padding:0 18px;height:42px;background:#0b1f3a;color:#fff;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;flex:none">
+          <div>Employee</div><div>Position</div><div>Country</div><div>Grade</div><div>Total Comp</div><div>FY25</div><div>Team / Status</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:auto">
+          <sc-for list="{{ employees }}" as="e" hint-placeholder-count="14">
+            <div onClick="{{ openProfile }}" style="{{ e.rowStyle }}">
+              <div style="display:flex;align-items:center;gap:11px;min-width:0"><div style="{{ e.avatarStyle }}">{{ e.initials }}</div><span style="font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.name }}</span></div>
+              <div style="color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.pos }}</div>
+              <div style="color:#64748b">{{ e.country }}</div>
+              <div><span style="{{ e.levelChip }}">{{ e.lvl }}</span></div>
+              <div class="num" style="font-weight:700;color:#0f172a">{{ e.comp }}</div>
+              <div><span style="{{ e.gradeBadge }}">{{ e.latest }}</span></div>
+              <div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-weight:600;color:#475569">{{ e.team }}</span><span style="{{ e.statusStyle }}">{{ e.status }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ========== POSITIONS ========== -->
+    <sc-if value="{{ isPositions }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:22px 28px 18px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:26px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Positions &amp; Requirements</h1>
+          <p style="font-size:13.5px;color:#64748b;margin-top:3px">Competency targets per role – scored 1 to 10</p>
+        </div>
+        <button style="display:flex;align-items:center;gap:7px;background:#0b1f3a;border:1px solid #0b1f3a;color:#fff;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add Position</button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-content:start">
+        <sc-for list="{{ positions }}" as="p" hint-placeholder-count="10">
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="padding:13px 15px 11px;border-bottom:1px solid #f1f5f9">
+              <div style="font-size:13.5px;font-weight:700;color:#0b1f3a;line-height:1.25;min-height:34px">{{ p.title }}</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px"><span style="font-size:11px;font-weight:600;color:#64748b;background:#f1f5f9;padding:2px 8px;border-radius:5px">{{ p.func }}</span><span class="num" style="font-size:11px;color:#94a3b8">{{ p.headcount }} filled</span></div>
+            </div>
+            <div style="padding:12px 15px;display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ p.reqs }}" as="r" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:3px"><span style="color:#64748b;font-weight:600">{{ r.k }}</span><span class="num" style="color:#0f172a;font-weight:700">{{ r.v }}</span></div>
+                  <div style="height:6px;background:#f1f5f9;border-radius:5px;overflow:hidden"><div style="{{ r.barStyle }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ========== COMPARISON ========== -->
+    <sc-if value="{{ isComparison }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:22px 28px 18px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:26px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Employee Comparison</h1>
+          <p style="font-size:13.5px;color:#64748b;margin-top:3px">Side-by-side compensation &amp; performance · 3 of 5 slots</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;color:#334155;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit">Export PPTX</button>
+          <button style="display:flex;align-items:center;gap:7px;background:#0b1f3a;border:1px solid #0b1f3a;color:#fff;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add Employee</button>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:160px repeat(3,1fr);gap:0;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+        <div style="display:flex;flex-direction:column;border-right:1px solid #e2e8f0">
+          <div style="height:118px;border-bottom:1px solid #f1f5f9;background:#f8fafc"></div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:0 16px;font-size:12px;font-weight:600;color:#64748b">
+            <div>Base Salary</div><div>STI Target</div><div>LTI Target</div><div>Other Bonus</div>
+            <div style="color:#0b1f3a;font-weight:700">Total Comp</div><div>FY2025 Grade</div><div>Direct Reports</div><div>Tenure</div>
+          </div>
+        </div>
+        <sc-for list="{{ comparison }}" as="c" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;border-right:1px solid #f1f5f9">
+            <div style="height:118px;border-bottom:1px solid #f1f5f9;padding:16px;display:flex;align-items:center;gap:12px;background:#f8fafc">
+              <div style="width:46px;height:46px;border-radius:50%;background:#0b1f3a;color:#fcd34d;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ c.initials }}</div>
+              <div style="min-width:0"><div style="font-size:14.5px;font-weight:800;color:#0b1f3a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</div><div style="font-size:11.5px;color:#475569;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.pos }}</div><div style="font-size:11px;color:#94a3b8;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.country }} · {{ c.func }}</div></div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:0 16px;font-size:13px;text-align:right">
+              <div class="num" style="color:#0f172a;font-weight:600">{{ c.base }}</div>
+              <div class="num" style="color:#475569">{{ c.sti }}</div>
+              <div class="num" style="color:#475569">{{ c.lti }}</div>
+              <div class="num" style="color:#475569">{{ c.ob }}</div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px"><div style="flex:1;height:9px;background:#f1f5f9;border-radius:6px;overflow:hidden;max-width:90px"><div style="{{ c.barStyle }}"></div></div><span class="num" style="font-weight:800;color:#0b1f3a">{{ c.total }}</span></div>
+              <div style="text-align:right"><span style="{{ c.gradeBadge }}">{{ c.grade }}</span></div>
+              <div class="num" style="color:#0f172a;font-weight:600">{{ c.team }}</div>
+              <div class="num" style="color:#0f172a;font-weight:600">{{ c.tenure }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ========== ORG · BY BANNER ========== -->
+    <sc-if value="{{ isOrgBanner }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:22px 28px 18px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:26px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Org Structure – By Banner</h1>
+          <p style="font-size:13.5px;color:#64748b;margin-top:3px">Reporting line across all banners · drag a node to reassign</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">Export PPTX</div>
+          <div onClick="{{ goOrgFunction }}" style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">Switch to Function ›</div>
+        </div>
+      </div>
+      <!-- NOTE: actual d3-org-chart goes here in real implementation — this is a static layout preview only -->
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 320px;gap:16px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:auto;box-shadow:0 1px 2px rgba(15,23,42,.04);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;font-weight:600">
+          [d3-org-chart renders here — drag/zoom/PPTX enabled]
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+          <div style="background:#0b1f3a;border-radius:14px;padding:16px 18px;color:#fff">
+            <div style="font-size:12px;color:#94a3b8;font-weight:600">Total Headcount</div>
+            <div class="num" style="font-size:32px;font-weight:800;margin-top:2px">27 <span style="font-size:14px;color:#facc15;font-weight:600">· 7 banners</span></div>
+          </div>
+          <div style="flex:1;min-height:0;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="background:#0b1f3a;color:#fff;padding:10px 16px;font-size:12.5px;font-weight:600">Branch Summary</div>
+            <div style="flex:1;overflow:auto">
+              <sc-for list="{{ orgBannerSummary }}" as="b" hint-placeholder-count="7">
+                <div style="padding:10px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px">
+                  <div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span style="font-size:12.5px;font-weight:700;color:#0f172a">{{ b.country }}</span><span style="{{ b.tagStyle }}">{{ b.tag }}</span></div><div style="font-size:10.5px;color:#94a3b8;margin-top:1px">Head · {{ b.head }}</div></div>
+                  <div class="num" style="font-size:16px;font-weight:800;color:#0b1f3a">{{ b.headcount }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ========== ORG · BY FUNCTION ========== -->
+    <sc-if value="{{ isOrgFunction }}" hint-placeholder-val="{{ true }}">
+    <div style="height:100%;display:flex;flex-direction:column;padding:22px 28px 18px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:26px;font-weight:800;color:#0b1f3a;letter-spacing:-.01em">Org Structure – By Function</h1>
+          <p style="font-size:13.5px;color:#64748b;margin-top:3px">Six functional pillars · global function heads</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">Export PPTX</div>
+          <div onClick="{{ goOrgBanner }}" style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:#334155;cursor:pointer">‹ Switch to Banner</div>
+        </div>
+      </div>
+      <!-- NOTE: actual d3-org-chart goes here in real implementation -->
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 300px;gap:16px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:auto;box-shadow:0 1px 2px rgba(15,23,42,.04);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;font-weight:600">
+          [d3-org-chart renders here — drag/zoom/PPTX enabled]
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+          <div style="background:#0b1f3a;border-radius:14px;padding:16px 18px;color:#fff">
+            <div style="font-size:12px;color:#94a3b8;font-weight:600">Total Headcount</div>
+            <div class="num" style="font-size:32px;font-weight:800;margin-top:2px">27 <span style="font-size:14px;color:#facc15;font-weight:600">· 6 functions</span></div>
+          </div>
+          <div style="flex:1;min-height:0;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(15,23,42,.04)">
+            <div style="background:#0b1f3a;color:#fff;padding:10px 16px;font-size:12.5px;font-weight:600">Function Summary</div>
+            <div style="flex:1;overflow:auto">
+              <sc-for list="{{ orgFuncSummary }}" as="f" hint-placeholder-count="6">
+                <div style="padding:10px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px">
+                  <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#0f172a">{{ f.name }}</div><div style="font-size:10.5px;color:#94a3b8;margin-top:1px">Head · {{ f.head }}</div></div>
+                  <div class="num" style="font-size:16px;font-weight:800;color:#0b1f3a">{{ f.headcount }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { page: 'home' };
+  go(p){ this.setState({ page: p }); }
+  renderVals(){
+    const page = this.state.page;
+    const tab = (p)=>{
+      const active = (p==='org'? page.startsWith('org') : page===p);
+      return `display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:8px;cursor:pointer;transition:background .15s;color:${active?'#fff':'rgba(255,255,255,.62)'};background:${active?'rgba(255,255,255,.14)':'transparent'};font-weight:${active?600:500}`;
+    };
+    const bannerRaw = [
+      ['Spain','Madrid','Leadership · Finance · Strategy',8,'HQ','#facc15','#0b1f3a','#fffbeb'],
+      ['France','Paris','Sales · Marketing',3,'','#3b82f6','',''],
+      ['Germany','Munich','Engineering · Product',3,'','#3b82f6','',''],
+      ['Italy','Milan','Operations · Supply Chain',2,'','#3b82f6','',''],
+      ['Singapore','Singapore','APAC Strategy',3,'Regional','#10b981','#065f46','#ecfdf5'],
+      ['Thailand','Bangkok','Support · Operations',2,'','#3b82f6','',''],
+      ['Australia','Sydney','Business Development',2,'','#3b82f6','',''],
+    ];
+    const funcRaw = [['Product',6,'#2563eb'],['Operations',4,'#0891b2'],['Marketing',4,'#d97706'],['Finance',4,'#16a34a'],['Human Resources',4,'#7c3aed'],['Leadership',1,'#e11d48']];
+    const maxF = 6;
+    const funcBars = funcRaw.map(([name,count,c])=>({ name, count, barStyle:`width:${Math.round(count/maxF*100)}%;height:100%;background:${c};border-radius:6px` }));
+    const gColor = (g)=>{
+      if(g==='A') return ['#dcfce7','#15803d'];
+      if(g==='A-') return ['#d1fae5','#047857'];
+      if(g==='B+') return ['#e0f2fe','#0369a1'];
+      if(g==='B') return ['#fef9c3','#a16207'];
+      return ['#f1f5f9','#475569'];
+    };
+    const perfRaw = [['FY2021','A','Excellent'],['FY2022','A','Excellent'],['FY2023','A-','Very Good'],['FY2024','A','Excellent'],['FY2025','B+','Good']];
+    const perf = perfRaw.map(([fy,grade,label])=>{ const [bg,fg]=gColor(grade); return { fy, grade, label, badge:`background:${bg};color:${fg};font-size:18px;font-weight:800;padding:7px 0;border-radius:8px` }; });
+    const empRaw = [
+      ['Robert King','Chief Executive Officer','Exec','Spain','Leadership',315000,'A-',5,'Active'],
+      ['Victor Pak','VP Product','Exec','Spain','Product',315000,'A-',1,'Active'],
+      ['Alex Morgan','Senior Product Manager','Manager','Spain','Product',160000,'B+',3,'Active'],
+      ['Sofia Martinez','HR Director','Manager','Spain','Human Resources',155000,'A',3,'Active'],
+      ['Daniel Lee','Finance Manager','Manager','Spain','Finance',150000,'B+',3,'Active'],
+      ['Liam Carter','Product Owner','IC','France','Product',77500,'B+',0,'Active'],
+      ['Nina Brandt','UX Lead','IC','Germany','Product',77500,'B+',0,'Active'],
+      ['David Kim','Product Analyst','IC','Spain','Product',77500,'A-',0,'Resigned'],
+    ];
+    const initials = (n)=> n.split(' ').map(w=>w[0]).slice(0,2).join('');
+    const gradePill = (g)=>{ const [bg,fg]=gColor(g); return `background:${bg};color:${fg};font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px`; };
+    const gradeChip = (lvl)=>{ const m={Exec:['#0b1f3a','#fff'],Manager:['#e0e7ff','#3730a3'],IC:['#f1f5f9','#475569']}; const [bg,fg]=m[lvl]; return `background:${bg};color:${fg};font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:6px`; };
+    const employees = empRaw.map((r,i)=>{
+      const [name,pos,lvl,country,func,total,latest,team,status]=r;
+      const active = status==='Active';
+      return { id:i, name, pos, lvl, country, func, team: team||'–',
+        comp: '€'+(total/1000)+'k', latest, status, initials: initials(name),
+        rowStyle:`display:grid;grid-template-columns:2.3fr 1.4fr 1fr .9fr 1fr .8fr .9fr;align-items:center;padding:0 18px;height:46px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12.5px;opacity:${active?1:.55}`,
+        levelChip: gradeChip(lvl), gradeBadge: gradePill(latest),
+        statusStyle:`font-size:11px;font-weight:600;color:${active?'#15803d':'#94a3b8'}`,
+        avatarStyle:`width:30px;height:30px;border-radius:50%;background:${active?'#0b1f3a':'#94a3b8'};color:#fcd34d;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none`,
+      };
+    });
+    const posRaw = [
+      ['Chief Executive Officer','Leadership',10,10,9,9,1],
+      ['VP Product','Product',9,9,8,8,1],
+      ['Senior Product Manager','Product',7,8,8,7,1],
+      ['Product Owner','Product',5,6,7,6,1],
+      ['HR Director','Human Resources',8,8,7,6,1],
+    ];
+    const reqColor = (v)=> v>=9?'#0b1f3a':v>=7?'#2563eb':v>=5?'#0891b2':'#64748b';
+    const positions = posRaw.map(([title,func,l,e,s,m,hc])=>({
+      title, func, headcount: hc,
+      reqs:[['Leadership',l],['Experience',e],['Skill',s],['Market',m]].map(([k,v])=>({ k, v, barStyle:`width:${v*10}%;height:100%;background:${reqColor(v)};border-radius:5px` }))
+    }));
+    const cmpRaw = [
+      ['Alex Morgan','Senior Product Manager','Spain','Product',110000,15000,25000,5000,160000,'B+',3,'10.1 yrs'],
+      ['Sofia Martinez','HR Director','Spain','Human Resources',105000,14000,24000,4500,155000,'A',3,'12.3 yrs'],
+      ['Michael Tan','Operations Manager','Spain','Operations',98000,12500,21000,4000,145000,'A-',3,'8.4 yrs'],
+    ];
+    const cmpMax = 160000;
+    const comparison = cmpRaw.map(([name,pos,country,func,base,sti,lti,ob,total,grade,team,tenure])=>{
+      const [gbg,gfg]=gColor(grade);
+      return { name, pos, country, func, tenure, team, initials: initials(name),
+        base:'€'+base.toLocaleString(), sti:'€'+sti.toLocaleString(), lti:'€'+lti.toLocaleString(), ob:'€'+ob.toLocaleString(),
+        total:'€'+total.toLocaleString(), grade, gradeBadge:`background:${gbg};color:${gfg};font-size:13px;font-weight:800;padding:3px 12px;border-radius:7px`,
+        barStyle:`width:${Math.round(total/cmpMax*100)}%;height:100%;background:linear-gradient(90deg,#0b1f3a,#1e40af);border-radius:6px` };
+    });
+    const proj=(lat,lon)=>({ cx:Math.round((lon+180)/360*1000), cy:Math.round((90-lat)/180*500) });
+    const mkRaw=[
+      ['Spain',40.4,-3.7,8,'HQ','#f59e0b'],['France',48.9,2.35,3,'','#3b82f6'],
+      ['Germany',48.1,11.6,3,'','#3b82f6'],['Italy',45.5,9.2,2,'','#3b82f6'],
+      ['Singapore',1.35,103.8,3,'Regional','#10b981'],['Thailand',13.75,100.5,2,'','#3b82f6'],
+      ['Australia',-33.9,151.2,2,'','#3b82f6'],
+    ];
+    const mapMarkers=mkRaw.map(([country,lat,lon,hc,tag,color])=>{ const {cx,cy}=proj(lat,lon); const left=cx>820; return {
+      country, hc, tag: tag||'Banner', color, cx, cy, glow:`${color}33`,
+      labelX: left? cx-12 : cx+12, labelAnchor: left?'end':'start',
+    }; });
+    const orgBannerSummary = [
+      ['Spain','Robert King','HQ',8],['France','Liam Carter','',3],
+      ['Germany','Nina Brandt','',3],['Italy','Luca Bianchi','',2],
+      ['Singapore','Mei Lin Tan','Regional',3],['Thailand','Somchai Pansa','',2],
+      ['Australia','Olivia Brown','',2],
+    ].map(([country,head,tag,hc])=>({ country, head, headcount:hc, tag,
+      tagStyle: tag? `font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:5px;color:${tag==='HQ'?'#0b1f3a':'#065f46'};background:${tag==='HQ'?'#fffbeb':'#ecfdf5'}`:'display:none' }));
+    const orgFuncSummary = [
+      ['Leadership','Robert King',1],['Product','Victor Pak',6],['Human Resources','Helena Voss',4],
+      ['Finance','George Hale',4],['Marketing','Carla Mendez',4],['Operations','Omar Said',4],
+    ].map(([name,head,hc])=>({ name, head, headcount:hc }));
+    return {
+      isHome: page==='home', isProfile: page==='profile', isEmployees: page==='employees',
+      isPositions: page==='positions', isComparison: page==='comparison',
+      isOrgBanner: page==='orgBanner', isOrgFunction: page==='orgFunction',
+      tabEmployees: tab('employees'), tabPositions: tab('positions'), tabComparison: tab('comparison'),
+      tabOrgBanner: tab('org'), tabOrgFunction: tab('org'),
+      goHome:()=>this.go('home'), goEmployees:()=>this.go('employees'), goPositions:()=>this.go('positions'),
+      goComparison:()=>this.go('comparison'), goOrgBanner:()=>this.go('orgBanner'), goOrgFunction:()=>this.go('orgFunction'),
+      openProfile:()=>this.go('profile'),
+      funcBars, perf, employees, positions, comparison, mapMarkers,
+      orgBannerSummary, orgFuncSummary,
+    };
+  }
+}
+</script>
+</body>
+</html>
