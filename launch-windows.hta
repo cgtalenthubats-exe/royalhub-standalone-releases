@@ -14,26 +14,75 @@
     MINIMIZEBUTTON="yes"
 />
 <style>
-  body { font-family: "Segoe UI", Arial, sans-serif; text-align: center; padding: 28px; background: #f4f6fb; }
-  h1 { font-size: 17px; color: #0b1f3a; margin-bottom: 6px; }
-  p { font-size: 12.5px; color: #555; margin: 4px 0; }
-  .row { margin-top: 10px; }
-  button { font-size: 14px; padding: 10px 24px; background: #0b1f3a; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 6px; }
-  button:hover { background: #16305c; }
-  button:disabled { background: #9aa5b8; cursor: default; }
-  #stopBtn { background: #7a1f1f; }
-  #stopBtn:hover { background: #9c2828; }
-  #stopBtn:disabled { background: #9aa5b8; }
-  .secondary { background: #44546f; font-size: 12.5px; padding: 8px 18px; }
-  .secondary:hover { background: #56698a; }
-  .secondary:disabled { background: #9aa5b8; }
-  #status { margin-top: 16px; font-size: 12px; color: #888; min-height: 16px; }
-  #checklist { text-align: left; margin: 14px auto 0; max-width: 380px; font-size: 12px; }
-  #checklist div { margin: 3px 0; }
-  .good { color: #1a7f37; }
-  .bad { color: #b42318; font-weight: 600; }
-  .info { color: #888; }
-  #checklist a { color: #0b1f3a; }
+  /* Palette: navy/blue "Trust & Authority" enterprise system. Segoe UI stays
+     the font (not a Google-hosted face) because this window has to render
+     correctly with zero internet access -- the whole point of the offline
+     indicator below is that the app still works when there's no connection
+     to fetch anything else with. */
+  :root {
+    --navy: #1E3A5F;
+    --navy-dark: #15293F;
+    --blue: #2563EB;
+    --green: #059669;
+    --green-bg: #D1FAE5;
+    --red: #DC2626;
+    --red-dark: #B91C1C;
+    --red-bg: #FEE2E2;
+    --amber: #D97706;
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --fg: #0F172A;
+    --muted-fg: #5B6472;
+    --muted-bg: #F1F3F5;
+    --border: #E4E7EB;
+  }
+
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--fg); margin: 0; padding: 20px 22px; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; letter-spacing: 0.3px; }
+  .brand-name { font-size: 15px; font-weight: 600; color: var(--navy); }
+
+  .conn-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted-fg); padding: 4px 9px; border-radius: 999px; background: var(--muted-bg); border: 1px solid var(--border); }
+  .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-fg); flex-shrink: 0; }
+  .conn-dot.online { background: var(--green); }
+  .conn-dot.offline { background: var(--muted-fg); }
+
+  p.lead { font-size: 12.5px; color: var(--muted-fg); margin: 0 0 14px; line-height: 1.5; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px 14px; margin-bottom: 10px; }
+  .status-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+  .status-row + .status-row { border-top: 1px solid var(--border); }
+  .status-icon { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--muted-bg); color: var(--muted-fg); }
+  .status-icon.good { background: var(--green-bg); color: var(--green); }
+  .status-icon.bad { background: var(--red-bg); color: var(--red); }
+  .status-text { font-size: 12.5px; line-height: 1.45; flex: 1; min-width: 0; }
+  .status-text .label { font-weight: 600; color: var(--fg); }
+  .status-text .detail { color: var(--muted-fg); }
+  .status-text a { color: var(--blue); cursor: pointer; text-decoration: underline; }
+
+  .actions-primary { margin: 14px 0 8px; }
+  .btn { font-family: inherit; font-size: 14px; font-weight: 600; padding: 11px 20px; border: none; border-radius: 7px; cursor: pointer; transition: background 150ms ease; }
+  .btn:disabled { cursor: default; opacity: 0.55; }
+  .btn-block { display: block; width: 100%; }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--navy-dark); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: var(--red-dark); }
+  .btn-ghost { background: var(--muted-bg); color: var(--navy); font-size: 12.5px; padding: 9px 20px; margin-top: 8px; }
+  .btn-ghost:hover:not(:disabled) { background: var(--border); }
+
+  .divider { height: 1px; background: var(--border); margin: 14px 0 12px; }
+
+  .actions-secondary { display: flex; gap: 8px; }
+  .btn-outline { flex: 1; background: transparent; color: var(--muted-fg); font-size: 12px; padding: 8px 10px; border: 1px solid var(--border); }
+  .btn-outline:hover:not(:disabled) { background: var(--muted-bg); color: var(--fg); }
+
+  #status { margin-top: 12px; font-size: 11.5px; color: var(--muted-fg); min-height: 15px; text-align: center; }
+
+  [hidden] { display: none !important; }
 </style>
 <script language="JScript">
 var isRunning = false;
@@ -57,6 +106,28 @@ function SetIdleButtons(enabled) {
     document.getElementById("runBtn").disabled = !(enabled && requirementsOk);
     document.getElementById("backupBtn").disabled = !enabled;
     document.getElementById("restoreBtn").disabled = !enabled;
+}
+
+// Sets an icon-circle + label/detail status row in one place, rather than
+// repeating this innerHTML pattern at every call site.
+function SetStatusRow(prefix, tone, glyph, label, detailHtml) {
+    var icon = document.getElementById("icon-" + prefix);
+    var text = document.getElementById("text-" + prefix);
+    icon.className = "status-icon" + (tone ? " " + tone : "");
+    icon.innerHTML = glyph;
+    text.innerHTML = '<span class="label">' + label + '</span> <span class="detail">' + detailHtml + '</span>';
+}
+
+// The small "Online"/"Offline" badge in the top-right corner \u2014 reflects
+// whether the last update check actually reached the internet, independent
+// of whether a patch was needed. Deliberately neutral-grey when offline
+// (not red): working offline is a normal, supported way to use this app,
+// not an error state.
+function SetConnectionBadge(online) {
+    var dot = document.getElementById("connDot");
+    var text = document.getElementById("connText");
+    dot.className = "conn-dot " + (online ? "online" : "offline");
+    text.innerText = online ? "Online" : "Offline";
 }
 
 function ParseVersion(v) {
@@ -132,49 +203,55 @@ function RunPatcher(shell, scriptDir) {
 // no internet \u2014 this app is supposed to keep working fully offline, so a
 // failed update check should be visible, not a dead end.
 function CheckRequirements() {
-    var nodeLine = document.getElementById("check-node");
-    var updateLine = document.getElementById("check-update");
     var shell = new ActiveXObject("WScript.Shell");
     var fso = new ActiveXObject("Scripting.FileSystemObject");
     var scriptDir = GetScriptDir();
 
-    nodeLine.innerHTML = '<span class="info">\u23f3 Checking for Node.js...</span>';
+    SetStatusRow("node", "", "\u2026", "Node.js", "Checking this computer\u2026");
 
     var nodeVersion = GetNodeVersion(shell);
     if (!nodeVersion) {
-        nodeLine.innerHTML = '<span class="bad">\u2717 Node.js not found.</span> <a href="javascript:OpenNodeDownload()">Click here to install it</a>, then come back to this window.';
+        SetStatusRow("node", "bad", "\u2717", "Node.js", 'not found. <a href="javascript:OpenNodeDownload()">Click here to install it</a>, then come back.');
         requirementsOk = false;
     } else if (!VersionAtLeast(nodeVersion, MIN_NODE_VERSION)) {
-        nodeLine.innerHTML = '<span class="bad">\u2717 Node.js v' + nodeVersion + ' found, but it\'s too old (need v' + MIN_NODE_VERSION + ' or later).</span> <a href="javascript:OpenNodeDownload()">Click here to update it</a>, then come back to this window.';
+        SetStatusRow("node", "bad", "\u2717", "Node.js", 'v' + nodeVersion + ' found, but it\'s too old (need v' + MIN_NODE_VERSION + '+). <a href="javascript:OpenNodeDownload()">Click here to update it</a>.');
         requirementsOk = false;
     } else {
-        nodeLine.innerHTML = '<span class="good">\u2713 Node.js v' + nodeVersion + ' found \u2014 ready to run.</span>';
+        SetStatusRow("node", "good", "\u2713", "Node.js", 'v' + nodeVersion + ' \u2014 ready to run.');
         requirementsOk = true;
     }
 
-    updateLine.innerHTML = '<span class="info">\u23f3 Checking for updates...</span>';
+    SetStatusRow("update", "", "\u2026", "Version", "Checking for updates\u2026");
     var patchResult = RunPatcher(shell, scriptDir);
     var info = ReadLocalVersionInfo(scriptDir, fso);
-    var versionText = info ? ("v" + info.version + ", updated " + info.updatedAt.substring(0, 10)) : "unknown version";
+    var versionText = info ? ("v" + info.version + " \u00b7 updated " + info.updatedAt.substring(0, 10)) : "unknown version";
 
+    // CHECK_FAILED is the only outcome that means the version check itself
+    // never reached the internet \u2014 every other outcome (even a failed
+    // patch) implies the connection worked, so that's what drives the
+    // Online/Offline badge.
     if (patchResult.indexOf("PATCHED:") === 0) {
         var parts = patchResult.split(":");
-        updateLine.innerHTML = '<span class="good">\u2713 Updated: v' + parts[1] + ' \u2192 v' + parts[2] + '.</span>';
+        SetStatusRow("update", "good", "\u2713", "Version", "Updated: v" + parts[1] + " \u2192 v" + parts[2] + ".");
+        SetConnectionBadge(true);
     } else if (patchResult.indexOf("UP_TO_DATE:") === 0) {
-        updateLine.innerHTML = '<span class="good">\u2713 Up to date (' + versionText + ').</span>';
+        SetStatusRow("update", "good", "\u2713", "Version", "Up to date (" + versionText + ").");
+        SetConnectionBadge(true);
     } else if (patchResult.indexOf("CHECK_FAILED") === 0) {
-        updateLine.innerHTML = '<span class="info">\u2139 Could not check for updates (no internet?) \u2014 continuing with ' + versionText + '.</span>';
+        SetStatusRow("update", "", "\u2139", "Version", "Can't check right now \u2014 using " + versionText + ".");
+        SetConnectionBadge(false);
     } else if (patchResult.indexOf("PATCH_FAILED:") === 0) {
-        updateLine.innerHTML = '<span class="bad">\u2717 Update failed \u2014 continuing with ' + versionText + '. Contact your IT support person if this keeps happening.</span>';
+        SetStatusRow("update", "bad", "\u2717", "Version", "Update failed \u2014 using " + versionText + ". Contact IT support if this keeps happening.");
+        SetConnectionBadge(true);
     } else {
-        updateLine.innerHTML = '<span class="info">' + versionText + '</span>';
+        SetStatusRow("update", "", "\u2139", "Version", versionText);
+        SetConnectionBadge(false);
     }
 
     SetIdleButtons(!isRunning);
 }
 
 function RunApp() {
-    var stopBtn = document.getElementById("stopBtn");
     var status = document.getElementById("status");
     SetIdleButtons(false);
 
@@ -205,14 +282,22 @@ function RunApp() {
     shell.Run('powershell -NoProfile -WindowStyle Hidden -Command "for ($i=0; $i -lt 120; $i++) { try { (New-Object Net.Sockets.TcpClient(\'localhost\',3000)).Close(); Start-Process \'http://localhost:3000\'; break } catch { Start-Sleep -Milliseconds 1000 } }"', 0, false);
 
     status.innerText = "Starting \u2014 look for the new window. Click Stop below when you're done.";
-    stopBtn.disabled = false;
-    document.getElementById("openBtn").disabled = false;
+    SetRunningUi(true);
+}
+
+// Swaps Run for Stop + Open in Browser (rather than just disabling them)
+// so only the one button that's actually usable is ever visible.
+function SetRunningUi(running) {
+    document.getElementById("runBtn").hidden = running;
+    document.getElementById("stopBtn").hidden = !running;
+    document.getElementById("stopBtn").disabled = !running;
+    document.getElementById("openBtn").hidden = !running;
+    document.getElementById("openBtn").disabled = !running;
 }
 
 function StopApp() {
-    var stopBtn = document.getElementById("stopBtn");
     var status = document.getElementById("status");
-    stopBtn.disabled = true;
+    document.getElementById("stopBtn").disabled = true;
     document.getElementById("openBtn").disabled = true;
     status.innerText = "Stopping...";
 
@@ -227,6 +312,7 @@ function StopApp() {
         shell.Run('cmd /c for /f "tokens=5" %a in (\'netstat -ano ^| findstr :3000 ^| findstr LISTENING\') do taskkill /PID %a /F', 0, true);
     } catch (e) {}
     isRunning = false;
+    SetRunningUi(false);
 
     status.innerText = "Stopped. (If the console window is still open, you can also just close it.)";
     SetIdleButtons(true);
@@ -259,7 +345,7 @@ function RestoreData() {
 }
 
 function Window_OnLoad() {
-    window.resizeTo(480, 360);
+    window.resizeTo(440, 430);
     CheckRequirements();
 }
 
@@ -272,22 +358,44 @@ function Window_OnFocus() {
 </script>
 </head>
 <body onload="Window_OnLoad()" onfocus="Window_OnFocus()">
-<h1>RoyalHub Standalone</h1>
-<p>Checks for updates automatically, then click Run to start the app.</p>
-<p>It will open automatically in your browser.</p>
-<div id="checklist">
-    <div id="check-node"><span class="info">&#9203; Checking this computer...</span></div>
-    <div id="check-update"></div>
+
+<div class="topbar">
+    <div class="brand">
+        <span class="brand-mark">RH</span>
+        <span class="brand-name">RoyalHub Standalone</span>
+    </div>
+    <div class="conn-badge">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connText">Checking</span>
+    </div>
 </div>
-<div class="row">
-    <button id="runBtn" onclick="RunApp()" disabled>Run</button>
-    <button id="stopBtn" onclick="StopApp()" disabled>Stop</button>
-    <button id="openBtn" class="secondary" onclick="OpenInBrowser()" disabled>Open in Browser</button>
+
+<p class="lead">Checks for updates automatically, then click Run to start the app. It opens in your browser.</p>
+
+<div class="card">
+    <div class="status-row">
+        <span class="status-icon" id="icon-node">&#8230;</span>
+        <span class="status-text" id="text-node"><span class="label">Node.js</span> <span class="detail">Checking this computer&#8230;</span></span>
+    </div>
+    <div class="status-row">
+        <span class="status-icon" id="icon-update">&#8230;</span>
+        <span class="status-text" id="text-update"><span class="label">Version</span> <span class="detail">Checking for updates&#8230;</span></span>
+    </div>
 </div>
-<div class="row">
-    <button id="backupBtn" class="secondary" onclick="BackupData()">Back Up Data</button>
-    <button id="restoreBtn" class="secondary" onclick="RestoreData()">Restore Data</button>
+
+<div class="actions-primary">
+    <button id="runBtn" class="btn btn-primary btn-block" onclick="RunApp()" disabled>Run</button>
+    <button id="stopBtn" class="btn btn-danger btn-block" onclick="StopApp()" hidden>Stop</button>
 </div>
+<button id="openBtn" class="btn btn-ghost btn-block" onclick="OpenInBrowser()" hidden>Open in Browser</button>
+
+<div class="divider"></div>
+
+<div class="actions-secondary">
+    <button id="backupBtn" class="btn btn-outline" onclick="BackupData()">Back Up Data</button>
+    <button id="restoreBtn" class="btn btn-outline" onclick="RestoreData()">Restore Data</button>
+</div>
+
 <div id="status"></div>
 </body>
 </html>
