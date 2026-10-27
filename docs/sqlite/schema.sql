@@ -131,6 +131,16 @@ CREATE TABLE org_edges (
   updated_at                   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Matches the cloud edition's migration 026 constraint
+-- (org_edges_employee_position_id_dimension_key). setEmployeeManager()'s
+-- "insert ... on conflict (employee_position_id, dimension) do update" upsert
+-- depends on a real unique index existing on exactly these columns to have
+-- anything to match against; without it, every call fails with a SQL error
+-- that's silently swallowed by the caller, so "Reports to" in the Add
+-- Employee wizard, the org chart's placement editor, and the org chart OCR
+-- import all silently do nothing.
+CREATE UNIQUE INDEX org_edges_position_dimension ON org_edges(employee_position_id, dimension);
+
 CREATE TABLE departments (
   department_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   name               TEXT NOT NULL,

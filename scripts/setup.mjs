@@ -159,6 +159,18 @@ function ensureIcpdSchema() {
         );
     `);
 
+    // A database created before this index existed in schema.sql is missing
+    // it too (CREATE TABLE IF NOT EXISTS above never touches an existing
+    // org_edges table) - without it, setEmployeeManager()'s upsert has no
+    // unique index to match against and silently fails every time, so
+    // "Reports to" (wizard, org chart placement editor, OCR import) never
+    // actually takes effect on a database from before this fix.
+    try {
+        db.exec("CREATE UNIQUE INDEX IF NOT EXISTS org_edges_position_dimension ON org_edges(employee_position_id, dimension)");
+    } catch (err) {
+        console.warn(`Could not add the org_edges unique index (${err.message}) - "Reports to" may not save. This usually means two existing rows already conflict; ask for help fixing the data directly if this keeps happening.`);
+    }
+
     db.close();
 }
 

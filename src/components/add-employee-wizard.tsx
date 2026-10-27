@@ -291,18 +291,31 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
         });
         if (!res.ok || !res.id) { setSaving(false); toast.error(res.error || "Could not create employee"); return; }
 
-        const followUps: Promise<any>[] = [];
-        if (photoFile) { const fd = new FormData(); fd.append("file", photoFile); followUps.push(uploadEmployeePhoto(res.id, fd)); }
-        if (resumeFile) { const fd = new FormData(); fd.append("file", resumeFile); followUps.push(uploadEmployeeResume(res.id, fd)); }
-        if (personal.manager_id) followUps.push(setEmployeeManager(res.id, "banner", Number(personal.manager_id)));
+        // Labeled so a failure here can actually be reported — these used to
+        // be fired with their results ignored, so e.g. a failed "Reports to"
+        // save (silent on the server side too — see setEmployeeManager) left
+        // the org chart wrong with no indication anything had gone wrong at
+        // all; the success toast below said otherwise regardless.
+        const followUps: { label: string; promise: Promise<{ ok: boolean; error?: string }> }[] = [];
+        if (photoFile) { const fd = new FormData(); fd.append("file", photoFile); followUps.push({ label: "Photo", promise: uploadEmployeePhoto(res.id, fd) }); }
+        if (resumeFile) { const fd = new FormData(); fd.append("file", resumeFile); followUps.push({ label: "Resume", promise: uploadEmployeeResume(res.id, fd) }); }
+        if (personal.manager_id) followUps.push({ label: "Reports to", promise: setEmployeeManager(res.id, "banner", Number(personal.manager_id)) });
         for (const entry of compHist) {
             const { key, ...input } = entry as any;
-            followUps.push(upsertCompensationHistory(res.id, input));
+            followUps.push({ label: "Compensation history", promise: upsertCompensationHistory(res.id, input) });
         }
-        if (followUps.length) await Promise.all(followUps);
+        const failures: string[] = [];
+        if (followUps.length) {
+            const results = await Promise.all(followUps.map((f) => f.promise));
+            results.forEach((r, i) => { if (!r.ok) failures.push(`${followUps[i].label}${r.error ? ` (${r.error})` : ""}`); });
+        }
 
         setSaving(false);
-        toast.success(`${personal.name} added`);
+        if (failures.length) {
+            toast.warning(`${personal.name} added, but couldn't save: ${failures.join(", ")}. Fix these from their profile page.`);
+        } else {
+            toast.success(`${personal.name} added`);
+        }
         reset();
         onOpenChange(false);
         router.refresh();
