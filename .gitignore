@@ -32,6 +32,7 @@ yarn-debug.log*
 yarn-error.log*
 /install-log.txt
 /patch-debug.log
+/patch-log.txt
 
 # OS
 .DS_Store

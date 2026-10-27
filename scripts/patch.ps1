@@ -30,6 +30,20 @@ $root = Split-Path -Parent $PSScriptRoot
 $releaseRaw = "https://raw.githubusercontent.com/cgtalenthubats-exe/royalhub-standalone-releases/main"
 $releaseZip = "https://github.com/cgtalenthubats-exe/royalhub-standalone-releases/archive/refs/heads/main.zip"
 $versionFile = Join-Path $root "version.json"
+$logFile = Join-Path $root "patch-log.txt"
+
+# Writes the one-line result both to stdout (what launch-windows.hta/.bat
+# actually read) and, timestamped, to patch-log.txt - a running history of
+# every check this app has ever done, not just the failures patch-debug.log
+# captures, so "did it ever actually update, and when" has a real answer
+# instead of needing to reproduce the problem again to find out.
+function Write-Result($line) {
+    Write-Output $line
+    try {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Add-Content -Path $logFile -Value "[$timestamp] $line" -ErrorAction SilentlyContinue
+    } catch {}
+}
 
 function Get-LocalVersion {
     if (Test-Path $versionFile) {
@@ -43,12 +57,12 @@ $localVersion = Get-LocalVersion
 try {
     $remote = Invoke-RestMethod -Uri "$releaseRaw/version.json" -TimeoutSec 15
 } catch {
-    Write-Output "CHECK_FAILED"
+    Write-Result "CHECK_FAILED"
     exit 0
 }
 
 if ($localVersion -eq $remote.version) {
-    Write-Output "UP_TO_DATE:$localVersion"
+    Write-Result "UP_TO_DATE:$localVersion"
     exit 0
 }
 
@@ -65,7 +79,7 @@ try {
         Compress-Archive -Path $items -DestinationPath $backupOut -Force
     }
 } catch {
-    Write-Output "PATCH_FAILED:could not back up data first ($($_.Exception.Message))"
+    Write-Result "PATCH_FAILED:could not back up data first ($($_.Exception.Message))"
     exit 1
 }
 
@@ -78,7 +92,7 @@ try {
 
     $extractedDir = Get-ChildItem -Path $tempDir -Directory | Where-Object { $_.Name -like "royalhub-standalone-releases-*" } | Select-Object -First 1
     if (-not $extractedDir) {
-        Write-Output "PATCH_FAILED:downloaded update was not in the expected format"
+        Write-Result "PATCH_FAILED:downloaded update was not in the expected format"
         exit 1
     }
 
@@ -90,17 +104,17 @@ try {
     # this exclude list deleting something it shouldn't.
     robocopy $extractedDir.FullName $root /E /XD data backups node_modules .git .next /XF .env.local install-log.txt version.json /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) {
-        Write-Output "PATCH_FAILED:file copy error (robocopy code $LASTEXITCODE)"
+        Write-Result "PATCH_FAILED:file copy error (robocopy code $LASTEXITCODE)"
         exit 1
     }
 
     Copy-Item -Path (Join-Path $extractedDir.FullName "version.json") -Destination $versionFile -Force
 } catch {
-    Write-Output "PATCH_FAILED:$($_.Exception.Message)"
+    Write-Result "PATCH_FAILED:$($_.Exception.Message)"
     exit 1
 } finally {
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Output "PATCHED:${localVersion}:$($remote.version)"
+Write-Result "PATCHED:${localVersion}:$($remote.version)"
 exit 0
