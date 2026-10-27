@@ -1,13 +1,21 @@
 <html>
 <head>
 <title>RoyalHub Standalone</title>
+<!-- SINGLEINSTANCE is "no" deliberately. Windows keys it off this APPLICATION
+     tag's ID, not the file path, and this same ID is baked into every
+     release's copy of this file - so with it "yes", opening a different
+     release folder's launcher while an older one's window was still around
+     (even an invisibly dead one, e.g. the Script Error state RunPatcher
+     could throw into before it was caught) silently did nothing instead of
+     opening a window: no error, no prompt, just a launcher that would never
+     come up no matter how many times the file was reopened. -->
 <HTA:APPLICATION
     APPLICATIONNAME="RoyalHub Standalone Launcher"
     ID="RoyalHubLauncher"
     BORDER="thin"
     CAPTION="yes"
     SHOWINTASKBAR="yes"
-    SINGLEINSTANCE="yes"
+    SINGLEINSTANCE="no"
     SYSMENU="yes"
     SCROLL="no"
     MAXIMIZEBUTTON="no"
@@ -210,7 +218,22 @@ function ReadLocalVersionInfo(scriptDir, fso) {
 // patch-debug.log for a real look instead of guessing again blind.
 function RunPatcher(shell, fso, scriptDir) {
     var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + scriptDir + '\\scripts\\patch.ps1"';
-    var r = RunHidden(shell, fso, cmd);
+    var r;
+    try {
+        r = RunHidden(shell, fso, cmd);
+    } catch (e) {
+        // WshShell.Run(...,true) can throw "Unable to wait for process"
+        // (Code 0) after enough blocking Run calls have piled up in this
+        // same mshta.exe session — a known Windows Script Host quirk, not
+        // anything this specific command did wrong. Uncaught, this used to
+        // pop IE's generic "Script Error" dialog AND leave isChecking stuck
+        // true forever (see CheckRequirements' try/finally below), so no
+        // amount of refocusing this window could ever recover — the only
+        // way out was killing the process or restarting the computer.
+        // Treating it as a plain failed check instead means this is now
+        // just "can't check right now", not a dead window.
+        return "CHECK_FAILED";
+    }
     var markers = ["PATCHED:", "UP_TO_DATE:", "CHECK_FAILED", "PATCH_FAILED:"];
     var lines = r.output.split(/\r?\n/);
     for (var i = 0; i < lines.length; i++) {
@@ -243,53 +266,63 @@ function CheckRequirements() {
     if (isChecking) return;
     isChecking = true;
 
-    var shell = new ActiveXObject("WScript.Shell");
-    var fso = new ActiveXObject("Scripting.FileSystemObject");
-    var scriptDir = GetScriptDir();
+    // try/finally so isChecking is GUARANTEED to reset no matter what goes
+    // wrong inside \u2014 this check re-runs on every window focus, so one
+    // uncaught exception here used to leave isChecking stuck true forever,
+    // which permanently blocked Window_OnFocus from ever re-checking again
+    // (see its guard below): the window looked alive but could never
+    // recover on its own, the one failure mode bad enough that killing the
+    // process or restarting the computer was the only way out.
+    try {
+        var shell = new ActiveXObject("WScript.Shell");
+        var fso = new ActiveXObject("Scripting.FileSystemObject");
+        var scriptDir = GetScriptDir();
 
-    SetStatusRow("node", "", "\u2026", "Node.js", "Checking this computer\u2026");
+        SetStatusRow("node", "", "\u2026", "Node.js", "Checking this computer\u2026");
 
-    var nodeVersion = GetNodeVersion(shell, fso);
-    if (!nodeVersion) {
-        SetStatusRow("node", "bad", "\u2717", "Node.js", 'not found. <a href="javascript:OpenNodeDownload()">Click here to install it</a>, then come back.');
-        requirementsOk = false;
-    } else if (!VersionAtLeast(nodeVersion, MIN_NODE_VERSION)) {
-        SetStatusRow("node", "bad", "\u2717", "Node.js", 'v' + nodeVersion + ' found, but it\'s too old (need v' + MIN_NODE_VERSION + '+). <a href="javascript:OpenNodeDownload()">Click here to update it</a>.');
-        requirementsOk = false;
-    } else {
-        SetStatusRow("node", "good", "\u2713", "Node.js", 'v' + nodeVersion + ' \u2014 ready to run.');
-        requirementsOk = true;
+        var nodeVersion = GetNodeVersion(shell, fso);
+        if (!nodeVersion) {
+            SetStatusRow("node", "bad", "\u2717", "Node.js", 'not found. <a href="javascript:OpenNodeDownload()">Click here to install it</a>, then come back.');
+            requirementsOk = false;
+        } else if (!VersionAtLeast(nodeVersion, MIN_NODE_VERSION)) {
+            SetStatusRow("node", "bad", "\u2717", "Node.js", 'v' + nodeVersion + ' found, but it\'s too old (need v' + MIN_NODE_VERSION + '+). <a href="javascript:OpenNodeDownload()">Click here to update it</a>.');
+            requirementsOk = false;
+        } else {
+            SetStatusRow("node", "good", "\u2713", "Node.js", 'v' + nodeVersion + ' \u2014 ready to run.');
+            requirementsOk = true;
+        }
+
+        SetStatusRow("update", "", "\u2026", "Version", "Checking for updates\u2026");
+        var patchResult = RunPatcher(shell, fso, scriptDir);
+        var info = ReadLocalVersionInfo(scriptDir, fso);
+        var versionText = info ? ("v" + info.version + " \u00b7 updated " + info.updatedAt.substring(0, 10)) : "unknown version";
+
+        // CHECK_FAILED is the only outcome that means the version check itself
+        // never reached the internet \u2014 every other outcome (even a failed
+        // patch) implies the connection worked, so that's what drives the
+        // Online/Offline badge.
+        if (patchResult.indexOf("PATCHED:") === 0) {
+            var parts = patchResult.split(":");
+            SetStatusRow("update", "good", "\u2713", "Version", "Updated: v" + parts[1] + " \u2192 v" + parts[2] + ".");
+            SetConnectionBadge(true);
+        } else if (patchResult.indexOf("UP_TO_DATE:") === 0) {
+            SetStatusRow("update", "good", "\u2713", "Version", "Up to date (" + versionText + ").");
+            SetConnectionBadge(true);
+        } else if (patchResult.indexOf("CHECK_FAILED") === 0) {
+            SetStatusRow("update", "", "\u2139", "Version", "Can't check right now \u2014 using " + versionText + ".");
+            SetConnectionBadge(false);
+        } else if (patchResult.indexOf("PATCH_FAILED:") === 0) {
+            SetStatusRow("update", "bad", "\u2717", "Version", "Update failed \u2014 using " + versionText + ". Contact IT support if this keeps happening.");
+            SetConnectionBadge(true);
+        } else {
+            SetStatusRow("update", "", "\u2139", "Version", versionText);
+            SetConnectionBadge(false);
+        }
+
+        SetIdleButtons(!isRunning);
+    } finally {
+        isChecking = false;
     }
-
-    SetStatusRow("update", "", "\u2026", "Version", "Checking for updates\u2026");
-    var patchResult = RunPatcher(shell, fso, scriptDir);
-    var info = ReadLocalVersionInfo(scriptDir, fso);
-    var versionText = info ? ("v" + info.version + " \u00b7 updated " + info.updatedAt.substring(0, 10)) : "unknown version";
-
-    // CHECK_FAILED is the only outcome that means the version check itself
-    // never reached the internet \u2014 every other outcome (even a failed
-    // patch) implies the connection worked, so that's what drives the
-    // Online/Offline badge.
-    if (patchResult.indexOf("PATCHED:") === 0) {
-        var parts = patchResult.split(":");
-        SetStatusRow("update", "good", "\u2713", "Version", "Updated: v" + parts[1] + " \u2192 v" + parts[2] + ".");
-        SetConnectionBadge(true);
-    } else if (patchResult.indexOf("UP_TO_DATE:") === 0) {
-        SetStatusRow("update", "good", "\u2713", "Version", "Up to date (" + versionText + ").");
-        SetConnectionBadge(true);
-    } else if (patchResult.indexOf("CHECK_FAILED") === 0) {
-        SetStatusRow("update", "", "\u2139", "Version", "Can't check right now \u2014 using " + versionText + ".");
-        SetConnectionBadge(false);
-    } else if (patchResult.indexOf("PATCH_FAILED:") === 0) {
-        SetStatusRow("update", "bad", "\u2717", "Version", "Update failed \u2014 using " + versionText + ". Contact IT support if this keeps happening.");
-        SetConnectionBadge(true);
-    } else {
-        SetStatusRow("update", "", "\u2139", "Version", versionText);
-        SetConnectionBadge(false);
-    }
-
-    SetIdleButtons(!isRunning);
-    isChecking = false;
 }
 
 function RunApp() {
@@ -345,22 +378,30 @@ function SetRunningUi(running) {
     openBtn.disabled = !running;
 }
 
+// Kill whatever is actually listening on port 3000 \u2014 the launch window is a
+// plain visible console now (see RunApp), not something this script holds a
+// process handle to, so finding it by what it's doing (serving port 3000) is
+// more reliable than trying to track it by PID anyway. /T also kills its
+// whole process tree (npm's own node.exe, plus any worker processes Next.js
+// spawns under it) \u2014 /F alone only killed that one matched PID, so closing
+// the console window instead of clicking Stop (or even clicking Stop, before
+// this) could leave child processes running invisibly, still holding the
+// data folder's files open \u2014 which is exactly why deleting an old release
+// folder later could fail with "this file is open in another program" even
+// though every visible window had long since been closed.
+function KillPort3000(shell) {
+    try {
+        shell.Run('cmd /c for /f "tokens=5" %a in (\'netstat -ano ^| findstr :3000 ^| findstr LISTENING\') do taskkill /PID %a /F /T', 0, true);
+    } catch (e) {}
+}
+
 function StopApp() {
     var status = document.getElementById("status");
     document.getElementById("stopBtn").disabled = true;
     document.getElementById("openBtn").disabled = true;
     status.innerText = "Stopping...";
 
-    var shell = new ActiveXObject("WScript.Shell");
-
-    // Kill whatever is actually listening on port 3000 \u2014 the launch window
-    // is a plain visible console now (see RunApp), not something this script
-    // holds a process handle to, so finding it by what it's doing (serving
-    // port 3000) is more reliable than trying to track it by PID anyway.
-    // Closing that console window by hand works too, same as the .bat/.command.
-    try {
-        shell.Run('cmd /c for /f "tokens=5" %a in (\'netstat -ano ^| findstr :3000 ^| findstr LISTENING\') do taskkill /PID %a /F', 0, true);
-    } catch (e) {}
+    KillPort3000(new ActiveXObject("WScript.Shell"));
     isRunning = false;
     SetRunningUi(false);
 
@@ -405,9 +446,18 @@ function Window_OnLoad() {
 function Window_OnFocus() {
     if (!isRunning && !isChecking) CheckRequirements();
 }
+
+// Closing this window with the titlebar X (the natural way most people
+// close it, Stop button or not) used to leave the dev server running
+// invisibly in the background if Stop was never clicked \u2014 same cleanup as
+// Stop, just triggered by the window actually going away instead of a
+// click.
+function Window_OnUnload() {
+    if (isRunning) KillPort3000(new ActiveXObject("WScript.Shell"));
+}
 </script>
 </head>
-<body onload="Window_OnLoad()" onfocus="Window_OnFocus()">
+<body onload="Window_OnLoad()" onfocus="Window_OnFocus()" onunload="Window_OnUnload()">
 
 <div class="topbar clearfix">
     <span class="brand-mark">RH</span>
