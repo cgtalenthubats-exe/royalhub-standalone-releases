@@ -15,77 +15,66 @@
 />
 <style>
   /* Palette: navy/blue "Trust & Authority" enterprise system. Segoe UI stays
-     the font (not a Google-hosted face) because this window has to render
-     correctly with zero internet access -- the whole point of the offline
-     indicator below is that the app still works when there's no connection
-     to fetch anything else with. */
-  :root {
-    --navy: #1E3A5F;
-    --navy-dark: #15293F;
-    --blue: #2563EB;
-    --green: #059669;
-    --green-bg: #D1FAE5;
-    --red: #DC2626;
-    --red-dark: #B91C1C;
-    --red-bg: #FEE2E2;
-    --amber: #D97706;
-    --bg: #F8FAFC;
-    --surface: #FFFFFF;
-    --fg: #0F172A;
-    --muted-fg: #5B6472;
-    --muted-bg: #F1F3F5;
-    --border: #E4E7EB;
-  }
-
+     the font because this window has to render correctly with zero internet
+     access (the whole point of the offline badge is that the app still
+     works with no connection). Colors are written as literal hex values
+     everywhere, not CSS custom properties (--vars) - this window renders
+     through Internet Explorer's engine (mshta.exe), which never supported
+     custom properties in any version, so var(--x) silently resolves to
+     nothing and every rule that used one loses its styling entirely. Layout
+     uses float/inline-block, not flexbox's "gap" property, for the same
+     reason - IE11 never added gap support for flex containers. */
   * { box-sizing: border-box; }
-  body { font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--fg); margin: 0; padding: 20px 22px; }
+  body { font-family: "Segoe UI", Arial, sans-serif; background: #F8FAFC; color: #0F172A; margin: 0; padding: 20px 22px; }
+  .clearfix:after { content: ""; display: block; clear: both; }
 
-  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .brand { display: flex; align-items: center; gap: 9px; }
-  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; letter-spacing: 0.3px; }
-  .brand-name { font-size: 15px; font-weight: 600; color: var(--navy); }
+  .topbar { margin-bottom: 14px; }
+  .brand-mark { display: inline-block; width: 26px; height: 26px; border-radius: 7px; background: #1E3A5F; color: #fff; font-size: 11px; font-weight: 700; text-align: center; line-height: 26px; vertical-align: middle; }
+  .brand-name { display: inline-block; vertical-align: middle; margin-left: 9px; font-size: 15px; font-weight: 600; color: #1E3A5F; }
+  .conn-badge { float: right; margin-top: 4px; font-size: 11px; color: #5B6472; padding: 4px 9px; border-radius: 999px; background: #F1F3F5; border: 1px solid #E4E7EB; }
+  .conn-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #5B6472; margin-right: 6px; }
+  .conn-dot.online { background: #059669; }
+  .conn-dot.offline { background: #5B6472; }
 
-  .conn-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted-fg); padding: 4px 9px; border-radius: 999px; background: var(--muted-bg); border: 1px solid var(--border); }
-  .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-fg); flex-shrink: 0; }
-  .conn-dot.online { background: var(--green); }
-  .conn-dot.offline { background: var(--muted-fg); }
+  p.lead { font-size: 12.5px; color: #5B6472; margin: 0 0 14px; line-height: 1.5; clear: both; }
 
-  p.lead { font-size: 12.5px; color: var(--muted-fg); margin: 0 0 14px; line-height: 1.5; }
+  .card { background: #FFFFFF; border: 1px solid #E4E7EB; border-radius: 10px; padding: 4px 14px; margin-bottom: 10px; clear: both; }
+  .status-row { padding: 10px 0; }
+  .status-row.bordered { border-top: 1px solid #E4E7EB; }
+  .status-icon { float: left; width: 22px; height: 22px; border-radius: 50%; text-align: center; line-height: 22px; font-size: 12px; font-weight: 700; background: #F1F3F5; color: #5B6472; }
+  .status-icon.good { background: #D1FAE5; color: #059669; }
+  .status-icon.bad { background: #FEE2E2; color: #DC2626; }
+  .status-text { margin-left: 32px; display: block; font-size: 12.5px; line-height: 1.45; }
+  .status-text .label { font-weight: 600; color: #0F172A; }
+  .status-text .detail { color: #5B6472; }
+  .status-text a { color: #2563EB; cursor: pointer; text-decoration: underline; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px 14px; margin-bottom: 10px; }
-  .status-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
-  .status-row + .status-row { border-top: 1px solid var(--border); }
-  .status-icon { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--muted-bg); color: var(--muted-fg); }
-  .status-icon.good { background: var(--green-bg); color: var(--green); }
-  .status-icon.bad { background: var(--red-bg); color: var(--red); }
-  .status-text { font-size: 12.5px; line-height: 1.45; flex: 1; min-width: 0; }
-  .status-text .label { font-weight: 600; color: var(--fg); }
-  .status-text .detail { color: var(--muted-fg); }
-  .status-text a { color: var(--blue); cursor: pointer; text-decoration: underline; }
-
-  .actions-primary { margin: 14px 0 8px; }
-  .btn { font-family: inherit; font-size: 14px; font-weight: 600; padding: 11px 20px; border: none; border-radius: 7px; cursor: pointer; transition: background 150ms ease; }
-  .btn:disabled { cursor: default; opacity: 0.55; }
+  .actions-primary { margin: 14px 0 8px; clear: both; }
+  .btn { font-family: inherit; font-size: 14px; font-weight: 600; padding: 11px 20px; border: none; border-radius: 7px; cursor: pointer; }
+  .btn:disabled { cursor: default; background: #9aa5b8 !important; color: #fff; }
   .btn-block { display: block; width: 100%; }
-  .btn-primary { background: var(--navy); color: #fff; }
-  .btn-primary:hover:not(:disabled) { background: var(--navy-dark); }
-  .btn-danger { background: var(--red); color: #fff; }
-  .btn-danger:hover:not(:disabled) { background: var(--red-dark); }
-  .btn-ghost { background: var(--muted-bg); color: var(--navy); font-size: 12.5px; padding: 9px 20px; margin-top: 8px; }
-  .btn-ghost:hover:not(:disabled) { background: var(--border); }
+  .btn-primary { background: #1E3A5F; color: #fff; }
+  .btn-primary:hover { background: #15293F; }
+  .btn-danger { background: #DC2626; color: #fff; }
+  .btn-danger:hover { background: #B91C1C; }
+  .btn-ghost { background: #F1F3F5; color: #1E3A5F; font-size: 12.5px; padding: 9px 20px; margin-top: 8px; }
+  .btn-ghost:hover { background: #E4E7EB; }
 
-  .divider { height: 1px; background: var(--border); margin: 14px 0 12px; }
+  .divider { height: 1px; background: #E4E7EB; margin: 14px 0 12px; clear: both; }
 
-  .actions-secondary { display: flex; gap: 8px; }
-  .btn-outline { flex: 1; background: transparent; color: var(--muted-fg); font-size: 12px; padding: 8px 10px; border: 1px solid var(--border); }
-  .btn-outline:hover:not(:disabled) { background: var(--muted-bg); color: var(--fg); }
+  .actions-secondary { clear: both; }
+  .btn-outline { float: left; width: 48%; background: #fff; color: #5B6472; font-size: 12px; padding: 8px 10px; border: 1px solid #E4E7EB; }
+  .btn-outline:hover { background: #F1F3F5; color: #0F172A; }
+  .btn-outline.right { float: right; }
+  .btn-outline:disabled { background: #F1F3F5 !important; color: #9aa5b8 !important; }
 
-  #status { margin-top: 12px; font-size: 11.5px; color: var(--muted-fg); min-height: 15px; text-align: center; }
+  #status { margin-top: 12px; font-size: 11.5px; color: #5B6472; min-height: 15px; text-align: center; clear: both; }
 
   [hidden] { display: none !important; }
 </style>
 <script language="JScript">
 var isRunning = false;
+var isChecking = false;
 var requirementsOk = false;
 var MIN_NODE_VERSION = "22.13.0";
 
@@ -144,12 +133,31 @@ function VersionAtLeast(version, minVersion) {
     return true;
 }
 
-function GetNodeVersion(shell) {
+// Runs a command with NO visible window at all, by redirecting its output
+// to a temp file and reading that back afterward - unlike shell.Exec(),
+// which always opens a real console window with no way to hide it (Exec
+// has no windowStyle parameter; only Run does). That window was flashing
+// open and closed on every check, and each flash could steal and return
+// this window's focus, re-triggering Window_OnFocus mid-check and causing
+// a visible flicker loop with overlapping, conflicting checks underneath.
+function RunHidden(shell, fso, cmd) {
+    var tempPath = fso.GetSpecialFolder(2) + "\\rh_" + new Date().getTime() + "_" + Math.floor(Math.random() * 1000000) + ".tmp";
+    var exitCode = shell.Run('cmd /c ' + cmd + ' > "' + tempPath + '" 2>&1', 0, true);
+    var output = "";
+    if (fso.FileExists(tempPath)) {
+        var file = fso.OpenTextFile(tempPath, 1);
+        output = file.ReadAll();
+        file.Close();
+        try { fso.DeleteFile(tempPath, true); } catch (e) {}
+    }
+    return { output: output, exitCode: exitCode };
+}
+
+function GetNodeVersion(shell, fso) {
     try {
-        var p = shell.Exec('cmd /c node -v 2>nul');
-        var out = p.StdOut.ReadAll();
-        if (p.ExitCode !== 0 || !out) return null;
-        return out.replace(/^v/, "").replace(/\s+$/, "");
+        var r = RunHidden(shell, fso, "node -v");
+        if (r.exitCode !== 0 || !r.output) return null;
+        return r.output.replace(/^v/, "").replace(/\s+$/, "");
     } catch (e) { return null; }
 }
 
@@ -186,11 +194,10 @@ function ReadLocalVersionInfo(scriptDir, fso) {
 // no GitHub login involved, works the same for a "git clone" or ZIP
 // install), and if different, backs up data/ first and then patches \u2014
 // so by the time this returns, the app is already current.
-function RunPatcher(shell, scriptDir) {
+function RunPatcher(shell, fso, scriptDir) {
     var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + scriptDir + '\\scripts\\patch.ps1"';
-    var p = shell.Exec(cmd);
-    var output = p.StdOut.ReadAll();
-    return output.replace(/\s+$/, "");
+    var r = RunHidden(shell, fso, cmd);
+    return r.output.replace(/\s+$/, "");
 }
 
 // Checks what this computer actually needs before Run is allowed, and shows
@@ -203,13 +210,19 @@ function RunPatcher(shell, scriptDir) {
 // no internet \u2014 this app is supposed to keep working fully offline, so a
 // failed update check should be visible, not a dead end.
 function CheckRequirements() {
+    // Guards against overlapping runs \u2014 e.g. if this window's focus state
+    // flickers for any reason while a check (which can take several seconds:
+    // it includes a real network call) is already in progress.
+    if (isChecking) return;
+    isChecking = true;
+
     var shell = new ActiveXObject("WScript.Shell");
     var fso = new ActiveXObject("Scripting.FileSystemObject");
     var scriptDir = GetScriptDir();
 
     SetStatusRow("node", "", "\u2026", "Node.js", "Checking this computer\u2026");
 
-    var nodeVersion = GetNodeVersion(shell);
+    var nodeVersion = GetNodeVersion(shell, fso);
     if (!nodeVersion) {
         SetStatusRow("node", "bad", "\u2717", "Node.js", 'not found. <a href="javascript:OpenNodeDownload()">Click here to install it</a>, then come back.');
         requirementsOk = false;
@@ -222,7 +235,7 @@ function CheckRequirements() {
     }
 
     SetStatusRow("update", "", "\u2026", "Version", "Checking for updates\u2026");
-    var patchResult = RunPatcher(shell, scriptDir);
+    var patchResult = RunPatcher(shell, fso, scriptDir);
     var info = ReadLocalVersionInfo(scriptDir, fso);
     var versionText = info ? ("v" + info.version + " \u00b7 updated " + info.updatedAt.substring(0, 10)) : "unknown version";
 
@@ -249,6 +262,7 @@ function CheckRequirements() {
     }
 
     SetIdleButtons(!isRunning);
+    isChecking = false;
 }
 
 function RunApp() {
@@ -353,17 +367,15 @@ function Window_OnLoad() {
 // from the link above and alt-tabbing back \u2014 so the checklist updates on
 // its own instead of needing a separate "check again" button.
 function Window_OnFocus() {
-    if (!isRunning) CheckRequirements();
+    if (!isRunning && !isChecking) CheckRequirements();
 }
 </script>
 </head>
 <body onload="Window_OnLoad()" onfocus="Window_OnFocus()">
 
-<div class="topbar">
-    <div class="brand">
-        <span class="brand-mark">RH</span>
-        <span class="brand-name">RoyalHub Standalone</span>
-    </div>
+<div class="topbar clearfix">
+    <span class="brand-mark">RH</span>
+    <span class="brand-name">RoyalHub Standalone</span>
     <div class="conn-badge">
         <span class="conn-dot" id="connDot"></span>
         <span id="connText">Checking</span>
@@ -373,11 +385,11 @@ function Window_OnFocus() {
 <p class="lead">Checks for updates automatically, then click Run to start the app. It opens in your browser.</p>
 
 <div class="card">
-    <div class="status-row">
+    <div class="status-row clearfix">
         <span class="status-icon" id="icon-node">&#8230;</span>
         <span class="status-text" id="text-node"><span class="label">Node.js</span> <span class="detail">Checking this computer&#8230;</span></span>
     </div>
-    <div class="status-row">
+    <div class="status-row bordered clearfix">
         <span class="status-icon" id="icon-update">&#8230;</span>
         <span class="status-text" id="text-update"><span class="label">Version</span> <span class="detail">Checking for updates&#8230;</span></span>
     </div>
@@ -391,9 +403,9 @@ function Window_OnFocus() {
 
 <div class="divider"></div>
 
-<div class="actions-secondary">
+<div class="actions-secondary clearfix">
     <button id="backupBtn" class="btn btn-outline" onclick="BackupData()">Back Up Data</button>
-    <button id="restoreBtn" class="btn btn-outline" onclick="RestoreData()">Restore Data</button>
+    <button id="restoreBtn" class="btn btn-outline right" onclick="RestoreData()">Restore Data</button>
 </div>
 
 <div id="status"></div>
