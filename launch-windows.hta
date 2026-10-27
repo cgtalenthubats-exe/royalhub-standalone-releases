@@ -174,7 +174,12 @@ function OpenInBrowser() {
 
 // Reads version.json directly (separate from the patcher's own one-line
 // result) just to get the human-readable "updated" date for display \u2014
-// the patcher's output only needs to carry version numbers.
+// the patcher's output only needs to carry version numbers. Pulls the two
+// fields out with a regex rather than JSON.parse: this .hta's JScript
+// engine doesn't reliably support it (same category of gap as the CSS
+// variables, flexbox gap, and "hidden" attribute already found today),
+// and version.json's shape is simple and fixed enough not to need a real
+// parser anyway.
 function ReadLocalVersionInfo(scriptDir, fso) {
     var path = scriptDir + "\\version.json";
     if (!fso.FileExists(path)) return null;
@@ -182,7 +187,10 @@ function ReadLocalVersionInfo(scriptDir, fso) {
         var file = fso.OpenTextFile(path, 1);
         var text = file.ReadAll();
         file.Close();
-        return JSON.parse(text);
+        var versionMatch = text.match(/"version"\s*:\s*"([^"]*)"/);
+        if (!versionMatch) return null;
+        var updatedMatch = text.match(/"updatedAt"\s*:\s*"([^"]*)"/);
+        return { version: versionMatch[1], updatedAt: updatedMatch ? updatedMatch[1] : "" };
     } catch (e) { return null; }
 }
 
