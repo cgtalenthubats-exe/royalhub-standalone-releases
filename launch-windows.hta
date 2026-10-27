@@ -69,8 +69,6 @@
   .btn-outline:disabled { background: #F1F3F5 !important; color: #9aa5b8 !important; }
 
   #status { margin-top: 12px; font-size: 11.5px; color: #5B6472; min-height: 15px; text-align: center; clear: both; }
-
-  [hidden] { display: none !important; }
 </style>
 <script language="JScript">
 var isRunning = false;
@@ -321,13 +319,22 @@ function RunApp() {
 }
 
 // Swaps Run for Stop + Open in Browser (rather than just disabling them)
-// so only the one button that's actually usable is ever visible.
+// so only the one button that's actually usable is ever visible. Uses
+// style.display directly rather than the "hidden" attribute - this window
+// renders through Internet Explorer's engine, and on a real machine the
+// "hidden" attribute (and the [hidden] CSS rule meant to enforce it) did
+// not reliably hide these buttons, which then pushed the rest of the
+// window's content out of view entirely (SCROLL="no" means overflow is
+// just clipped, not scrollable). style.display is the one technique with
+// no HTML5/CSS3 ambiguity behind it at all.
 function SetRunningUi(running) {
-    document.getElementById("runBtn").hidden = running;
-    document.getElementById("stopBtn").hidden = !running;
-    document.getElementById("stopBtn").disabled = !running;
-    document.getElementById("openBtn").hidden = !running;
-    document.getElementById("openBtn").disabled = !running;
+    document.getElementById("runBtn").style.display = running ? "none" : "";
+    var stopBtn = document.getElementById("stopBtn");
+    stopBtn.style.display = running ? "" : "none";
+    stopBtn.disabled = !running;
+    var openBtn = document.getElementById("openBtn");
+    openBtn.style.display = running ? "" : "none";
+    openBtn.disabled = !running;
 }
 
 function StopApp() {
@@ -418,9 +425,9 @@ function Window_OnFocus() {
 
 <div class="actions-primary">
     <button id="runBtn" class="btn btn-primary btn-block" onclick="RunApp()" disabled>Run</button>
-    <button id="stopBtn" class="btn btn-danger btn-block" onclick="StopApp()" hidden>Stop</button>
+    <button id="stopBtn" class="btn btn-danger btn-block" onclick="StopApp()" style="display:none">Stop</button>
 </div>
-<button id="openBtn" class="btn btn-ghost btn-block" onclick="OpenInBrowser()" hidden>Open in Browser</button>
+<button id="openBtn" class="btn btn-ghost btn-block" onclick="OpenInBrowser()" style="display:none">Open in Browser</button>
 
 <div class="divider"></div>
 
