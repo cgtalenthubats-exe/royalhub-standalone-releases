@@ -102,5 +102,5 @@ try {
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Output "PATCHED:$localVersion:$($remote.version)"
+Write-Output "PATCHED:${localVersion}:$($remote.version)"
 exit 0
