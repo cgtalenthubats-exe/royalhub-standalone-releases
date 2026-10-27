@@ -16,6 +16,16 @@
 # application's own files.
 
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell's default .NET security protocol can be stuck on an
+# older TLS version depending on this machine's own Windows/.NET update
+# history, which GitHub's servers (TLS 1.2+ only) silently reject - the
+# connection just fails as if there were no internet at all. Forcing TLS
+# 1.2 here fixes that without needing any change on the machine itself.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch {}
+
 $root = Split-Path -Parent $PSScriptRoot
 $releaseRaw = "https://raw.githubusercontent.com/cgtalenthubats-exe/royalhub-standalone-releases/main"
 $releaseZip = "https://github.com/cgtalenthubats-exe/royalhub-standalone-releases/archive/refs/heads/main.zip"

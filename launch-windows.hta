@@ -194,10 +194,31 @@ function ReadLocalVersionInfo(scriptDir, fso) {
 // no GitHub login involved, works the same for a "git clone" or ZIP
 // install), and if different, backs up data/ first and then patches \u2014
 // so by the time this returns, the app is already current.
+//
+// Scans line by line rather than checking if the whole captured output
+// starts with a known marker: PowerShell can print other things to the
+// same stream first (a warning, a security notice) depending on this
+// machine's settings, and a strict "starts with" check would silently
+// fail to recognize a real result sitting a line or two further down. If
+// truly nothing recognizable comes back, the raw output is saved to
+// patch-debug.log for a real look instead of guessing again blind.
 function RunPatcher(shell, fso, scriptDir) {
     var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + scriptDir + '\\scripts\\patch.ps1"';
     var r = RunHidden(shell, fso, cmd);
-    return r.output.replace(/\s+$/, "");
+    var markers = ["PATCHED:", "UP_TO_DATE:", "CHECK_FAILED", "PATCH_FAILED:"];
+    var lines = r.output.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].replace(/\s+$/, "");
+        for (var j = 0; j < markers.length; j++) {
+            if (line.indexOf(markers[j]) === 0) return line;
+        }
+    }
+    try {
+        var log = fso.OpenTextFile(scriptDir + "\\patch-debug.log", 2, true);
+        log.Write(r.output);
+        log.Close();
+    } catch (e) {}
+    return "PATCH_FAILED:unrecognized output, see patch-debug.log";
 }
 
 // Checks what this computer actually needs before Run is allowed, and shows

@@ -93,6 +93,9 @@ to be undone by hand. `launch-windows.hta` shows the current version and when it
 updated right in the window; `launch-windows.bat` and `launch-mac.command` print the same
 information to the console. If the check itself fails (no internet, for instance), the app still
 starts normally with whatever version is already installed — it's never blocked waiting on this.
+On the rare occasion the check's result can't be understood at all, the full output is saved to
+**patch-debug.log** in this same folder — send that file along with install-log.txt if you ask
+for help.
 
 Moving to a new computer, or just want a safety copy of everything? Use Back Up Data / Restore
 Data above, or the standalone **backup-data** / **restore-data** scripts under
