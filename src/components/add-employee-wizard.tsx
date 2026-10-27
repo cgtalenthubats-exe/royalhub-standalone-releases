@@ -8,7 +8,7 @@ import { createCompanyOffice } from "@/app/actions/org";
 import { createPosition } from "@/app/actions/positions";
 import { uploadEmployeePhoto } from "@/app/actions/photo";
 import { uploadEmployeeResume } from "@/app/actions/resume";
-import { setEmployeeManager, type EmployeeListItem } from "@/app/actions/employees";
+import { type EmployeeListItem } from "@/app/actions/employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
@@ -285,6 +285,7 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
             position_effective_date: personal.position_effective_date || null,
             status: personal.status,
             readiness_potential: personal.readiness_potential,
+            manager_id: personal.manager_id ? Number(personal.manager_id) : null,
             compensation: compPayload,
             career_history: career,
             background,
@@ -292,14 +293,12 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
         if (!res.ok || !res.id) { setSaving(false); toast.error(res.error || "Could not create employee"); return; }
 
         // Labeled so a failure here can actually be reported — these used to
-        // be fired with their results ignored, so e.g. a failed "Reports to"
-        // save (silent on the server side too — see setEmployeeManager) left
-        // the org chart wrong with no indication anything had gone wrong at
-        // all; the success toast below said otherwise regardless.
+        // be fired with their results ignored, so e.g. a failed upload left
+        // the profile incomplete with no indication anything had gone wrong
+        // at all; the success toast below said otherwise regardless.
         const followUps: { label: string; promise: Promise<{ ok: boolean; error?: string }> }[] = [];
         if (photoFile) { const fd = new FormData(); fd.append("file", photoFile); followUps.push({ label: "Photo", promise: uploadEmployeePhoto(res.id, fd) }); }
         if (resumeFile) { const fd = new FormData(); fd.append("file", resumeFile); followUps.push({ label: "Resume", promise: uploadEmployeeResume(res.id, fd) }); }
-        if (personal.manager_id) followUps.push({ label: "Reports to", promise: setEmployeeManager(res.id, "banner", Number(personal.manager_id)) });
         for (const entry of compHist) {
             const { key, ...input } = entry as any;
             followUps.push({ label: "Compensation history", promise: upsertCompensationHistory(res.id, input) });

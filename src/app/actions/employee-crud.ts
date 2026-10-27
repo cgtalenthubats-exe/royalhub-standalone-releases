@@ -42,9 +42,12 @@ function buildValuesRows(rows: unknown[][], startAt = 1): { placeholders: string
 //
 // The banner and headcount trees both follow the real management chain, so
 // they take the given manager's primary position directly. The function
-// tree is its own hierarchy per company, so a manager from a different
-// function (or a different company) isn't a valid parent there — those
-// fall back to NULL.
+// tree only cares about function — a manager in a different function isn't
+// a valid parent there and falls back to NULL, but a manager in the SAME
+// function at a different company is: that's a real, if cross-company,
+// functional reporting line, and the renderer already draws it with a
+// dashed connector (see org-chart-d3.tsx's crossCompany check) so it reads
+// differently from an ordinary same-company line.
 async function createOrgEdges(
     employeeId: number,
     managerId: number | null,
@@ -67,7 +70,7 @@ async function createOrgEdges(
         );
         if (mgrPos) {
             managerPositionId = mgrPos.employee_position_id;
-            if (mgrPos.function_id === employee.function_id && mgrPos.banner_id === employee.banner_id) functionParent = managerPositionId;
+            if (mgrPos.function_id === employee.function_id) functionParent = managerPositionId;
         }
     }
     await query(
