@@ -312,10 +312,14 @@ export async function getOrgFlat(dimension: Dimension, filter: OrgTreeFilter = {
 }
 
 // "Full Org" for one specific employee — their whole subtree in a given
-// dimension, with them as the root instead of their company's actual CEO.
+// dimension, PLUS the chain of managers above them up to the top of the
+// hierarchy (so "who they report to" is visible too, not just their team).
 // Used by the profile's "Full Org" button (and reusable anywhere else a
-// person-centered rather than company-centered chart is wanted).
-export async function getEmployeeFullOrg(employeeId: number, dimension: Dimension = "banner"): Promise<{ nodes: OrgFlatNode[]; rootId: string } | null> {
+// person-centered rather than company-centered chart is wanted). subjectId
+// in the result tells the caller which node is the actual person (no longer
+// necessarily the root, now that the chain above them is included), so the
+// chart/PPTX export can highlight them.
+export async function getEmployeeFullOrg(employeeId: number, dimension: Dimension = "banner"): Promise<{ nodes: OrgFlatNode[]; rootId: string; subjectId: string } | null> {
     // A person can now hold more than one position — "Full Org" shows their
     // PRIMARY position's subtree, resolved explicitly so it's unambiguous
     // which of a concurrent holder's nodes this button means.
@@ -325,17 +329,22 @@ export async function getEmployeeFullOrg(employeeId: number, dimension: Dimensio
     );
     if (!primary) return null;
     const roots = await getOrgTreeRaw(dimension);
-    const find = (n: OrgNode): OrgNode | null => {
-        if (n.employee_position_id === primary.employee_position_id) return n;
-        for (const c of n.children) { const found = find(c); if (found) return found; }
+    // Root-first path from a tree root down to the target node, so the
+    // ancestor chain above the subject can be included too.
+    const findPath = (n: OrgNode, path: OrgNode[]): OrgNode[] | null => {
+        const nextPath = [...path, n];
+        if (n.employee_position_id === primary.employee_position_id) return nextPath;
+        for (const c of n.children) { const found = findPath(c, nextPath); if (found) return found; }
         return null;
     };
-    let target: OrgNode | null = null;
-    for (const r of roots) { target = find(r); if (target) break; }
-    if (!target) return null;
+    let path: OrgNode[] | null = null;
+    for (const r of roots) { path = findPath(r, []); if (path) break; }
+    if (!path) return null;
+    const target = path[path.length - 1];
+    const ancestors = path.slice(0, -1); // root-first, excluding the subject
 
     const flat: OrgFlatNode[] = [];
-    const walk = (n: OrgNode, parentId: string | null) => {
+    const pushNode = (n: OrgNode, parentId: string | null) => {
         flat.push({
             id: String(n.employee_position_id), parentId,
             employee_id: n.employee_id, name: n.name, position_title: n.position_title,
@@ -344,10 +353,18 @@ export async function getEmployeeFullOrg(employeeId: number, dimension: Dimensio
             country: n.country, status: n.status, scores: n.scores, position_req: n.position_req,
             reports_to_parent: n.reports_to_parent, tag_color: n.tag_color, is_primary: n.is_primary, has_concurrent: n.has_concurrent,
         });
+    };
+
+    let parentId: string | null = null;
+    for (const a of ancestors) { pushNode(a, parentId); parentId = String(a.employee_position_id); }
+    const walk = (n: OrgNode, pId: string | null) => {
+        pushNode(n, pId);
         n.children.forEach((c) => walk(c, String(n.employee_position_id)));
     };
-    walk(target, null);
-    return { nodes: flat, rootId: String(target.employee_position_id) };
+    walk(target, parentId);
+
+    const rootId = ancestors.length ? String(ancestors[0].employee_position_id) : String(target.employee_position_id);
+    return { nodes: flat, rootId, subjectId: String(target.employee_position_id) };
 }
 
 export interface HeadcountSummary {

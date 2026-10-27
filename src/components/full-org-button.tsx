@@ -9,14 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Network, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-// The same "whole hierarchy, rooted at this person" view the Proposal/
+// The same "this person's team, plus who they report to" view the Proposal/
 // Comparison PPTX exports draw a brief snippet of, but as the full
 // interactive chart (drag-and-drop, Compact/Stack V1/Stack V2 all
 // available) instead of a static picture.
 export function FullOrgButton({ employeeId, employeeName }: { employeeId: number; employeeName: string }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [data, setData] = useState<{ nodes: OrgFlatNode[]; rootId: string } | null>(null);
+    const [data, setData] = useState<{ nodes: OrgFlatNode[]; rootId: string; subjectId: string } | null>(null);
 
     async function openFullOrg() {
         setOpen(true);
@@ -42,7 +42,7 @@ export function FullOrgButton({ employeeId, employeeName }: { employeeId: number
                                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                             </div>
                         ) : (
-                            <OrgChartD3 nodes={data.nodes} dimension="banner" title={`Full Org — ${employeeName}`} />
+                            <OrgChartD3 nodes={data.nodes} dimension="banner" title={`Full Org — ${employeeName}`} highlightId={data.subjectId} />
                         )}
                     </div>
                 </DialogContent>

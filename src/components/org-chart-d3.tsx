@@ -67,7 +67,7 @@ function applyPending(nodes: OrgFlatNode[], pending: PendingMove[]): OrgFlatNode
     return Array.from(byId.values());
 }
 
-export function OrgChartD3({ nodes: serverNodes, dimension, title, perf, readOnly, onNodeClick }: {
+export function OrgChartD3({ nodes: serverNodes, dimension, title, perf, readOnly, onNodeClick, highlightId }: {
     nodes: OrgFlatNode[];
     dimension: Dimension;
     title: string;
@@ -81,6 +81,11 @@ export function OrgChartD3({ nodes: serverNodes, dimension, title, perf, readOnl
     // Overrides the default click-opens-the-info-dialog behaviour, so
     // /performance can open its own bottom drawer instead.
     onNodeClick?: (node: OrgFlatNode) => void;
+    // Node id (OrgFlatNode.id) to draw with an accent ring — e.g. "Full Org"
+    // no longer roots the chart at the subject (it now also shows who they
+    // report to), so without this there'd be nothing marking which card is
+    // actually them once the tree has more than one node.
+    highlightId?: string;
 }) {
     const router = useRouter();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -442,14 +447,14 @@ export function OrgChartD3({ nodes: serverNodes, dimension, title, perf, readOnl
                 // Seat count of this node's subtree, including the node itself —
                 // computed here rather than server-side because Stack V1 hides part
                 // of the tree from d3 but the count should still reflect everyone.
-                return nodeHtml(d.data, dimension, stackList, subtreeRowCount(d.data.id) + 1, perf?.[d.data.id]);
+                return nodeHtml(d.data, dimension, stackList, subtreeRowCount(d.data.id) + 1, perf?.[d.data.id], d.data.id === highlightId);
             })
             .render()
             .fit(); // auto-scale to the visible viewport on load — most noticeable on mobile
         // eslint-disable-next-line react-hooks/exhaustive-deps
         // perf feeds both nodeHeight and nodeContent, so a change to the
         // overlay has to re-run the whole render, not just repaint.
-    }, [nodes, layoutMode, perf]);
+    }, [nodes, layoutMode, perf, highlightId]);
 
     // Keep the chart fitted to the viewport as the container resizes (browser
     // resize, sidebar toggle, orientation change). d3-org-chart's own resize
@@ -888,7 +893,7 @@ function bulletBar(perf: PerfSummary): string {
       </div>`;
 }
 
-function nodeHtml(d: OrgFlatNode, dimension: Dimension, stackList?: string, fte?: number, perf?: PerfSummary): string {
+function nodeHtml(d: OrgFlatNode, dimension: Dimension, stackList?: string, fte?: number, perf?: PerfSummary, highlighted?: boolean): string {
     // A company node (/performance only) — the one node that isn't a person.
     // Clicking it is how a company's objectives get set, so unlike the
     // synthetic anchor below it renders as a real, visible card.
@@ -985,8 +990,8 @@ function nodeHtml(d: OrgFlatNode, dimension: Dimension, stackList?: string, fte?
     // is a separate section below this row, not counted in it.
     return `
     <div data-node-id="${esc(d.id)}"
-      style="box-sizing:border-box;width:100%;height:100%;border:1px solid ${tagHex ? `${tagHex}80` : "#000000"};border-radius:12px;background:${tagHex ? `${tagHex}1f` : "#fff"};
-             box-shadow:0 1px 3px rgba(0,0,0,.06);font-family:system-ui;cursor:grab;user-select:none;overflow:hidden;
+      style="box-sizing:border-box;width:100%;height:100%;border:${highlighted ? "2px solid #2563EB" : `1px solid ${tagHex ? `${tagHex}80` : "#000000"}`};border-radius:12px;background:${tagHex ? `${tagHex}1f` : "#fff"};
+             box-shadow:${highlighted ? "0 0 0 3px #2563EB33, 0 1px 3px rgba(0,0,0,.06)" : "0 1px 3px rgba(0,0,0,.06)"};font-family:system-ui;cursor:grab;user-select:none;overflow:hidden;
              display:flex;flex-direction:column;${d.status !== "Active" ? "opacity:.55;" : ""}">
       <div style="height:${perf ? 112 : 90}px;flex-shrink:0;display:flex;align-items:stretch;position:relative;pointer-events:none;">
         ${bannerLogo}
