@@ -77,9 +77,21 @@ function ensureIcpdSchema() {
     // dialog's upsert sets it unconditionally, so a database from before
     // this fix gets "table employee_compensation has no column named
     // updated_at" on every single save attempt.
+    //
+    // Two statements, not one "ADD COLUMN ... DEFAULT CURRENT_TIMESTAMP":
+    // SQLite refuses a non-constant default in ADD COLUMN the moment the
+    // table already has any rows at all ("Cannot add a column with
+    // non-constant default") - it only works on a brand-new, still-empty
+    // table, which is exactly why this passed testing against a fresh
+    // database but failed on every real user's database (which already has
+    // employees in it). Adding the column bare, then backfilling existing
+    // rows with a plain UPDATE, works on a non-empty table because neither
+    // statement alone asks SQLite to compute a per-row default at ADD
+    // COLUMN time.
     const compCols = db.prepare("PRAGMA table_info(employee_compensation)").all().map((c) => c.name);
     if (!compCols.includes("updated_at")) {
-        db.exec("ALTER TABLE employee_compensation ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        db.exec("ALTER TABLE employee_compensation ADD COLUMN updated_at TEXT");
+        db.exec("UPDATE employee_compensation SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL");
         console.log("Added employee_compensation.updated_at.");
     }
 
