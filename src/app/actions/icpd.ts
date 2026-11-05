@@ -72,6 +72,13 @@ export interface SuccessionPositionForEmployee {
     attributes: SuccessionCandidateAttribute[];
 }
 
+export interface StrengthDevelopment {
+    topStrength: string | null;
+    developmentAreas: string | null;
+    keyResponsibilities: string | null;
+    businessImpact: string | null;
+}
+
 export interface IcpdData {
     developmentPlans: DevelopmentPlan[];
     achievements: Achievement[];
@@ -79,8 +86,7 @@ export interface IcpdData {
     competencies: Competency[];
     careerSteps: CareerStep[];
     successionPositions: SuccessionPositionForEmployee[];
-    mentor: { employee_id: number; name: string } | null;
-    crossGroupMobility: boolean | null;
+    strengthDevelopment: StrengthDevelopment;
 }
 
 // ── Aggregate fetch (one call from the profile page) ───────────────────
@@ -105,9 +111,8 @@ export async function getEmployeeIcpd(employeeId: number): Promise<IcpdData> {
             [employeeId]
         ),
         queryOne<any>(
-            `select e.mentor_employee_id, e.cross_group_mobility, m.name as mentor_name
-             from employees e left join employees m on m.employee_id = e.mentor_employee_id
-             where e.employee_id = $1`,
+            `select top_strength, development_areas, key_responsibilities, business_impact
+             from employees where employee_id = $1`,
             [employeeId]
         ),
     ]);
@@ -133,8 +138,12 @@ export async function getEmployeeIcpd(employeeId: number): Promise<IcpdData> {
         competencies,
         careerSteps,
         successionPositions: successionRows.map((r) => ({ ...r, attributes: attributesByCandidate.get(r.candidate_id) || [] })),
-        mentor: emp?.mentor_employee_id ? { employee_id: emp.mentor_employee_id, name: emp.mentor_name } : null,
-        crossGroupMobility: emp?.cross_group_mobility == null ? null : !!emp.cross_group_mobility,
+        strengthDevelopment: {
+            topStrength: emp?.top_strength ?? null,
+            developmentAreas: emp?.development_areas ?? null,
+            keyResponsibilities: emp?.key_responsibilities ?? null,
+            businessImpact: emp?.business_impact ?? null,
+        },
     };
 }
 
@@ -327,29 +336,16 @@ export async function deleteCareerStep(id: number, employeeId: number): Promise<
     return { ok: true };
 }
 
-// ── Mentor + cross-group mobility (single-field updates on employees) ────
+// ── Top Strength / Development Areas / Key Responsibilities / Business
+//    Impact (free text, single-field updates on employees) ────────────────
+// Replaced the old Mentor + cross-group mobility card (client feedback).
 
-export async function listEmployeeOptions(excludeId: number): Promise<{ employee_id: number; name: string }[]> {
-    return query<{ employee_id: number; name: string }>(
-        `select employee_id, name from employees where employee_id != $1 order by name`,
-        [excludeId]
-    );
-}
-
-export async function updateMentor(employeeId: number, mentorEmployeeId: number | null): Promise<{ ok: boolean; error?: string }> {
-    if (mentorEmployeeId === employeeId) return { ok: false, error: "Someone can't be their own mentor" };
+export async function updateStrengthDevelopment(employeeId: number, input: StrengthDevelopment): Promise<{ ok: boolean; error?: string }> {
     try {
-        await query(`update employees set mentor_employee_id = $1 where employee_id = $2`, [mentorEmployeeId, employeeId]);
-    } catch (err: any) {
-        return { ok: false, error: err.message };
-    }
-    revalidatePath(`/employees/${employeeId}`);
-    return { ok: true };
-}
-
-export async function updateCrossGroupMobility(employeeId: number, value: boolean | null): Promise<{ ok: boolean; error?: string }> {
-    try {
-        await query(`update employees set cross_group_mobility = $1 where employee_id = $2`, [value == null ? null : (value ? 1 : 0), employeeId]);
+        await query(
+            `update employees set top_strength = $1, development_areas = $2, key_responsibilities = $3, business_impact = $4 where employee_id = $5`,
+            [input.topStrength?.trim() || null, input.developmentAreas?.trim() || null, input.keyResponsibilities?.trim() || null, input.businessImpact?.trim() || null, employeeId]
+        );
     } catch (err: any) {
         return { ok: false, error: err.message };
     }

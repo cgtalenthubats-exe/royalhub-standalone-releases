@@ -88,8 +88,12 @@ CREATE TABLE employees (
   resume_url              TEXT,
   gender                  TEXT CHECK (gender IS NULL OR gender IN ('Male', 'Female', 'Other')),
   tag_color               TEXT,
-  mentor_employee_id      INTEGER REFERENCES employees(employee_id),
-  cross_group_mobility    INTEGER,  -- 0/1/NULL — "Potential Career Movement Across CRC" on the ICPD tab; NULL = not yet assessed
+  mentor_employee_id      INTEGER REFERENCES employees(employee_id),  -- unused by the UI now (see top_strength etc. below) — kept so existing data isn't lost
+  cross_group_mobility    INTEGER,  -- unused by the UI now (see top_strength etc. below) — kept so existing data isn't lost
+  top_strength            TEXT,  -- ICPD tab card, free text — replaced the Mentor/Mobility card above
+  development_areas       TEXT,  -- ICPD tab card, free text
+  key_responsibilities    TEXT,  -- ICPD tab card, free text
+  business_impact         TEXT,  -- ICPD tab card, free text
   created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -173,7 +177,8 @@ CREATE TABLE employee_compensation (
   allowance_home_office     REAL,
   allowance_private_medical REAL,
   allowance_family_cover    TEXT,  -- free text, not encrypted (mig 023)
-  total_compensation        TEXT   -- encrypted
+  total_compensation        TEXT,  -- encrypted
+  updated_at                TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE compensation_history (

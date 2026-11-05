@@ -63,6 +63,25 @@ function ensureIcpdSchema() {
         db.exec("ALTER TABLE employees ADD COLUMN cross_group_mobility INTEGER");
         console.log("Added employees.cross_group_mobility.");
     }
+    // Replaced the Mentor/Mobility ICPD card with free-text fields (client
+    // feedback) — mentor_employee_id/cross_group_mobility above are left in
+    // place (unused) rather than dropped, so no existing data is lost.
+    for (const col of ["top_strength", "development_areas", "key_responsibilities", "business_impact"]) {
+        if (!employeeCols.includes(col)) {
+            db.exec(`ALTER TABLE employees ADD COLUMN ${col} TEXT`);
+            console.log(`Added employees.${col}.`);
+        }
+    }
+
+    // employee_compensation never had updated_at - the compensation save
+    // dialog's upsert sets it unconditionally, so a database from before
+    // this fix gets "table employee_compensation has no column named
+    // updated_at" on every single save attempt.
+    const compCols = db.prepare("PRAGMA table_info(employee_compensation)").all().map((c) => c.name);
+    if (!compCols.includes("updated_at")) {
+        db.exec("ALTER TABLE employee_compensation ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        console.log("Added employee_compensation.updated_at.");
+    }
 
     // employee_background.type used to be CHECK-constrained to 3 fixed values;
     // the ICPD tab needs 2 more ('strength', 'development_area'). SQLite has

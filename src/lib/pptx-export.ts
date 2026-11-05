@@ -1026,13 +1026,18 @@ export async function exportIcpdProfilePptx(input: { employee: EmployeeDetail; i
     drawIcpdHeader(s2, leftX, 1.45, leftW, 2.3, e);
     drawPerformanceGradeBox(s2, leftX, 3.85, leftW, 0.85, e.performance);
 
-    const mm = panel(s2, leftX, 4.8, leftW, 1.95, "Mentor & Mobility");
+    const mm = panel(s2, leftX, 4.8, leftW, 1.95, "Top Strength and Development Areas");
+    const strengthDev = icpd.strengthDevelopment;
     s2.addText(
         [
-            { text: "Mentor", options: { bold: true, fontSize: 8.5, color: NAVY, breakLine: true, paraSpaceAfter: 2 } },
-            { text: icpd.mentor?.name || "n/a", options: { fontSize: 9.5, color: "1F2937", breakLine: true, paraSpaceAfter: 10 } },
-            { text: "Potential Career Movement Across CRC", options: { bold: true, fontSize: 8.5, color: NAVY, breakLine: true, paraSpaceAfter: 2 } },
-            { text: icpd.crossGroupMobility == null ? "Not yet assessed" : icpd.crossGroupMobility ? "Yes" : "No", options: { fontSize: 9.5, color: "1F2937" } },
+            { text: "Top Strength", options: { bold: true, fontSize: 7.5, color: NAVY, breakLine: true, paraSpaceAfter: 1 } },
+            { text: strengthDev.topStrength || "n/a", options: { fontSize: 8.5, color: "1F2937", breakLine: true, paraSpaceAfter: 5 } },
+            { text: "Development Areas", options: { bold: true, fontSize: 7.5, color: NAVY, breakLine: true, paraSpaceAfter: 1 } },
+            { text: strengthDev.developmentAreas || "n/a", options: { fontSize: 8.5, color: "1F2937", breakLine: true, paraSpaceAfter: 5 } },
+            { text: "Key Responsibilities", options: { bold: true, fontSize: 7.5, color: NAVY, breakLine: true, paraSpaceAfter: 1 } },
+            { text: strengthDev.keyResponsibilities || "n/a", options: { fontSize: 8.5, color: "1F2937", breakLine: true, paraSpaceAfter: 5 } },
+            { text: "Business Impact", options: { bold: true, fontSize: 7.5, color: NAVY, breakLine: true, paraSpaceAfter: 1 } },
+            { text: strengthDev.businessImpact || "n/a", options: { fontSize: 8.5, color: "1F2937" } },
         ],
         { x: mm.innerX, y: mm.innerY, w: mm.innerW, h: mm.innerH, valign: "top" }
     );

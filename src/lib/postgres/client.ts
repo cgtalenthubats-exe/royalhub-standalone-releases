@@ -73,7 +73,13 @@ function runStatement<T>(text: string, params: unknown[]): T[] {
     // callers across the app pass `unknown` values (ids, strings, flags) in
     // already — the real type-level guarantee lives in those call sites, and
     // SQLite itself throws a clear runtime error for anything it can't bind.
-    const sqliteArgs = args.map((v) => (v === undefined ? null : v)) as (string | number | bigint | Buffer | null)[];
+    // node:sqlite's binder has no special case for JS booleans at all (unlike
+    // `pg`, which the cloud edition's identical call sites rely on) — it
+    // throws "Provided value cannot be bound to SQLite parameter N" on a
+    // raw true/false, so every true/false is coerced to SQLite's own 1/0
+    // convention here, the same convention already used for columns like
+    // is_hq/is_primary that this file reads back as 0/1.
+    const sqliteArgs = args.map((v) => (v === undefined ? null : typeof v === "boolean" ? (v ? 1 : 0) : v)) as (string | number | bigint | Buffer | null)[];
     const rows = stmt.all(...sqliteArgs);
     // Each row comes back with a null prototype (not a plain {} object) —
     // React Server Components refuses to serialize those across to Client

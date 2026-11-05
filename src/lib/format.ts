@@ -67,8 +67,18 @@ export function formatCurrency(value: number | null | undefined, currency = "EUR
     return `${symbol}${Math.round(value).toLocaleString("en-US")}`;
 }
 
+// Career History dates can be stored at day, month, or year precision (see
+// @/components/precision-date-input) - "2025" and "2025-02" both parse fine
+// as a Date (midnight Jan 1 / Feb 1), so they're matched explicitly before
+// that generic parse, which would otherwise print a day that was never
+// actually entered.
 export function formatDate(value: string | null | undefined): string {
     if (!value) return "-";
+    if (/^\d{4}$/.test(value)) return value;
+    if (/^\d{4}-\d{2}$/.test(value)) {
+        const d = new Date(value + "-01");
+        return isNaN(d.getTime()) ? value : d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+    }
     const d = new Date(value);
     if (isNaN(d.getTime())) return value;
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });

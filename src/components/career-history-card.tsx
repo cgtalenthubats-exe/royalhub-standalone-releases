@@ -6,6 +6,7 @@ import type { EmploymentHistoryEntry } from "@/app/actions/employment-history";
 import { createEmploymentHistory, updateEmploymentHistory, deleteEmploymentHistory } from "@/app/actions/employment-history";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PrecisionDateInput } from "@/components/precision-date-input";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
@@ -114,11 +115,11 @@ export function CareerHistoryCard({ employeeId, history }: { employeeId: number;
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Start Date</label>
-                                    <Input type="date" value={editing.start_date || ""} onChange={(e) => setEditing({ ...editing, start_date: e.target.value })} />
+                                    <PrecisionDateInput value={editing.start_date} onChange={(v) => setEditing({ ...editing, start_date: v })} />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">End Date</label>
-                                    <Input type="date" disabled={!!editing.is_current} value={editing.end_date || ""} onChange={(e) => setEditing({ ...editing, end_date: e.target.value })} />
+                                    <PrecisionDateInput value={editing.end_date} onChange={(v) => setEditing({ ...editing, end_date: v })} disabled={!!editing.is_current} />
                                 </div>
                             </div>
                             <label className="flex items-center gap-2 text-sm text-slate-600">

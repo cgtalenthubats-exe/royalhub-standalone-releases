@@ -41,7 +41,7 @@ import { PeriodicAssessmentCard } from "@/components/icpd-periodic-assessment-ca
 import { CompetenciesCard } from "@/components/icpd-competencies-card";
 import { CareerStepsCard } from "@/components/icpd-career-steps-card";
 import { SuccessionPositionsCard } from "@/components/icpd-succession-positions-card";
-import { MentorMobilityCard } from "@/components/icpd-mentor-mobility-card";
+import { StrengthDevelopmentCard } from "@/components/icpd-strength-development-card";
 
 export const dynamic = "force-dynamic";
 
@@ -292,7 +292,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
                             <SuccessionPositionsCard positions={icpd.successionPositions} />
-                            <MentorMobilityCard employeeId={emp.employee_id} mentor={icpd.mentor} crossGroupMobility={icpd.crossGroupMobility} />
+                            <StrengthDevelopmentCard employeeId={emp.employee_id} data={icpd.strengthDevelopment} />
                         </div>
                     </TabsContent>
                 </Tabs>

@@ -11,6 +11,7 @@ import { uploadEmployeeResume } from "@/app/actions/resume";
 import { type EmployeeListItem } from "@/app/actions/employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PrecisionDateInput } from "@/components/precision-date-input";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -593,8 +594,8 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                     <Input value={careerDraft.position} onChange={(e) => setCareerDraft({ ...careerDraft, position: e.target.value })} placeholder="Position" />
                                     <Combobox options={COUNTRIES} value={careerDraft.location || null} onChange={(v) => setCareerDraft({ ...careerDraft, location: v || "" })} placeholder="Location" searchPlaceholder="Search country, or type a city too…" />
                                     <div className="grid grid-cols-2 gap-2">
-                                        <Input type="date" value={careerDraft.start_date} onChange={(e) => setCareerDraft({ ...careerDraft, start_date: e.target.value })} />
-                                        <Input type="date" value={careerDraft.end_date} onChange={(e) => setCareerDraft({ ...careerDraft, end_date: e.target.value })} />
+                                        <PrecisionDateInput value={careerDraft.start_date} onChange={(v) => setCareerDraft({ ...careerDraft, start_date: v })} />
+                                        <PrecisionDateInput value={careerDraft.end_date} onChange={(v) => setCareerDraft({ ...careerDraft, end_date: v })} />
                                     </div>
                                 </div>
                                 <Button size="sm" variant="outline" className="gap-1.5" onClick={addCareerEntry}><Plus className="h-3.5 w-3.5" /> Add entry</Button>
