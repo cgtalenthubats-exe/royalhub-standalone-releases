@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 
-// Client feedback: Career History dates shouldn't force a specific day when
-// the person only knows (or only wants to record) the month+year, or just
-// the year - stores "2025-02-15" (day), "2025-02" (month), or "2025" (year)
-// as plain text in the same column, matched by @/lib/format's formatDate.
+// Client feedback: date fields shouldn't force a specific day when the
+// person only knows (or only wants to record) the month+year, or just the
+// year - stores "2025-02-15" (day), "2025-02" (month), or "2025" (year) as
+// plain text in the same column, matched by @/lib/format's formatDate.
 export type DatePrecision = "day" | "month" | "year";
 
 export function detectPrecision(value: string | null | undefined): DatePrecision {
@@ -20,25 +20,28 @@ export function PrecisionDateInput({ value, onChange, disabled }: {
     onChange: (value: string) => void;
     disabled?: boolean;
 }) {
-    // A brand-new (empty) field has nothing for detectPrecision to read, so
-    // clicking a precision button has to be remembered here instead -
-    // otherwise toggling to "Year" on an empty field just silently did
-    // nothing (detectPrecision("") always falls back to "day", since an
-    // empty string can't tell it what the user wants). This override is
-    // only a bridge until something is actually typed: once value is real,
-    // the effect below hands authority back to detectPrecision(value) -
-    // important because this component is reused for a different record
-    // without unmounting (the Dialog stays mounted across edits), so a
-    // leftover override from a previous record must not stick around once
-    // real data for the new one arrives.
-    const [override, setOverride] = useState<DatePrecision | null>(null);
-    useEffect(() => { if (value) setOverride(null); }, [value]);
-    const precision = override ?? detectPrecision(value);
+    // Precision is set ONCE from the starting value and never re-derived
+    // from `value` on every keystroke - it used to be computed fresh as
+    // detectPrecision(value) on every render, which broke year/month entry
+    // completely: typing the first digit of "2025" makes value "2", and
+    // detectPrecision("2") can't tell that's a year-in-progress (it only
+    // recognizes a COMPLETE 4-digit year), so it fell back to "day" and
+    // flipped the field back to a date picker after every single
+    // keystroke - "2" typed, falls back to Day, user clicks Year again,
+    // types "0" i.e. only ever gets one character in before resetting.
+    // Plain local state avoids that: once the user picks a precision, nothing
+    // overrides their choice while they're still typing into it. This is
+    // safe to never re-sync from a later `value` prop change because this
+    // component is only ever mounted inside a Dialog, which unmounts (so
+    // this re-initializes fresh) every time it's closed and reopened for a
+    // different record - see DialogContent, no forceMount - so there's no
+    // stale-precision-from-a-different-record risk either.
+    const [precision, setPrecision] = useState<DatePrecision>(() => detectPrecision(value));
 
     // Re-derives a sensible value for the new precision from whatever's
     // already entered, rather than just clearing the field on toggle.
-    function setPrecision(next: DatePrecision) {
-        setOverride(next);
+    function changePrecision(next: DatePrecision) {
+        setPrecision(next);
         if (!value) return;
         if (next === "year") onChange(value.slice(0, 4));
         else if (next === "month") onChange(/^\d{4}$/.test(value) ? value + "-01" : value.slice(0, 7));
@@ -53,7 +56,7 @@ export function PrecisionDateInput({ value, onChange, disabled }: {
                         key={p}
                         type="button"
                         disabled={disabled}
-                        onClick={() => setPrecision(p)}
+                        onClick={() => changePrecision(p)}
                         className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
                             precision === p ? "bg-[#0b1f3a] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                         }`}
