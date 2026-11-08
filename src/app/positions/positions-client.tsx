@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Position } from "@/app/actions/positions";
 import { createPosition, updatePosition, deletePosition } from "@/app/actions/positions";
 import { uploadPositionJdPdf } from "@/app/actions/position-jd";
+import { FunctionSelect } from "@/components/function-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -40,6 +41,7 @@ export function PositionsClient({ positions, functions, banners }: { positions: 
     const [jdFile, setJdFile] = useState<File | null>(null);
     const [uploadingJd, setUploadingJd] = useState(false);
     const [filterBanner, setFilterBanner] = useState<number | "all">("all");
+    const [localFunctions, setLocalFunctions] = useState<FunctionOpt[]>(functions);
 
     const visible = filterBanner === "all" ? positions : positions.filter((p) => p.banner_id === filterBanner);
 
@@ -183,15 +185,12 @@ export function PositionsClient({ positions, functions, banners }: { positions: 
                                 </select>
                                 <p className="mt-1 text-[11px] text-slate-400">Requirements are set per company, since the same title can differ across companies.</p>
                             </div>
-                            <div>
-                                <label className="mb-1 block text-xs font-medium text-slate-600">Function</label>
-                                <select className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                    value={editing.function_id ?? ""}
-                                    onChange={(e) => setEditing({ ...editing, function_id: e.target.value ? Number(e.target.value) : null })}>
-                                    <option value="">— none —</option>
-                                    {functions.map((f) => <option key={f.function_id} value={f.function_id}>{f.name}</option>)}
-                                </select>
-                            </div>
+                            <FunctionSelect
+                                functions={localFunctions}
+                                value={editing.function_id ?? null}
+                                onChange={(id) => setEditing({ ...editing, function_id: id })}
+                                onCreated={(f) => setLocalFunctions((prev) => [...prev, f])}
+                            />
                             <div className="grid grid-cols-2 gap-3">
                                 {CATS.map((c) => (
                                     <div key={c.key}>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Department } from "@/app/actions/departments";
 import { createDepartment, updateDepartment, deleteDepartment } from "@/app/actions/departments";
+import { FunctionSelect } from "@/components/function-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,7 @@ export function DepartmentsManagedCard({ employeeId, departments, offices, funct
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState<Partial<Department> | null>(null);
     const [saving, setSaving] = useState(false);
+    const [localFunctions, setLocalFunctions] = useState<Opt[]>(functions);
 
     function openAdd() { setEditing(empty(employeeId)); setOpen(true); }
     function openEdit(d: Department) { setEditing({ ...d }); setOpen(true); }
@@ -107,15 +109,13 @@ export function DepartmentsManagedCard({ employeeId, departments, offices, funct
                                         {offices.map((o) => <option key={o.office_id} value={o.office_id}>{o.banner_name} — {o.country}</option>)}
                                     </select>
                                 </div>
-                                <div>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">Function (optional)</label>
-                                    <select className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                        value={editing.function_id ?? ""}
-                                        onChange={(e) => setEditing({ ...editing, function_id: e.target.value ? Number(e.target.value) : null })}>
-                                        <option value="">— none —</option>
-                                        {functions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                    </select>
-                                </div>
+                                <FunctionSelect
+                                    label="Function (optional)"
+                                    functions={localFunctions.map((f) => ({ function_id: f.id, name: f.name }))}
+                                    value={editing.function_id ?? null}
+                                    onChange={(id) => setEditing({ ...editing, function_id: id })}
+                                    onCreated={(f) => setLocalFunctions((prev) => [...prev, { id: f.function_id, name: f.name }])}
+                                />
                             </div>
                             <div>
                                 <label className="mb-1 block text-xs font-medium text-slate-600">FTE</label>

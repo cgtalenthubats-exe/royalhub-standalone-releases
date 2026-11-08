@@ -188,7 +188,7 @@ export async function createEmployeeFull(input: NewEmployeeFullInput): Promise<{
              values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) returning employee_id`,
             [
                 input.name.trim(), banner_id, input.office_id, input.position_id, position_title, function_id, country, city,
-                input.nationality?.trim() || country, input.gender || null, input.job_grade?.trim() || null,
+                input.nationality?.trim() || null, input.gender || null, input.job_grade?.trim() || null,
                 input.date_of_birth || null, input.hire_date || null, input.position_effective_date || input.hire_date || null,
                 input.status || "Active", input.readiness_potential || null,
             ]
@@ -204,7 +204,7 @@ export async function createEmployeeFull(input: NewEmployeeFullInput): Promise<{
     if (c && Object.values(c).some((v) => v != null)) {
         try {
             await requireCompEditor();
-            const total_compensation = (c.base_salary ?? 0) + (c.sti_target ?? 0) + (c.lti_target ?? 0) + (c.other_bonus ?? 0);
+            const total_compensation = totalCompensationOf(c);
             await query(
                 `insert into employee_compensation
                     (employee_id, currency, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
@@ -435,12 +435,22 @@ export async function commitEmployeesCsv(rows: CommitCsvRow[]): Promise<CommitRe
 }
 
 export interface PersonalEmploymentInput {
+    name: string;
     date_of_birth: string | null;
     hire_date: string | null;
     position_effective_date: string | null;
     nationality: string | null;
     gender: string | null;
     job_grade: string | null;
+    readiness_potential: string | null;
+    // Where the person actually sits, set directly by whoever edits their
+    // profile - independent of which banner/office they're assigned to
+    // (client feedback: used to look tied to the banner because this was
+    // only ever snapshotted once at creation from the selected office, never
+    // editable afterward, and that snapshot was never kept in sync with a
+    // later office/position change either).
+    country: string | null;
+    city: string | null;
     // Retirement age varies by country, so it's entered per employee rather
     // than assumed — undefined = "not included in this save" (leave as-is),
     // distinct from null ("clear it"), so callers without visibility can omit
@@ -448,10 +458,12 @@ export interface PersonalEmploymentInput {
     retirement_age?: number | null;
 }
 
-// Editable "personal" attributes only — country/city/position/banner are
-// derived from the employee's office/position assignment (an org-chart move,
-// not a profile edit) and stay read-only on this form.
+// Editable "personal" attributes — position/banner/office themselves still
+// change only via an org-chart move (the Positions card), but Location
+// (country/city) is a direct field on this form now, not derived from that
+// assignment.
 export async function updateEmployeePersonal(employeeId: number, input: PersonalEmploymentInput): Promise<{ ok: boolean; error?: string }> {
+    if (!input.name?.trim()) return { ok: false, error: "Name is required" };
     // Retirement age is a sensitive field in its own right — only accept a
     // change to it from someone who can currently see it (defense in depth;
     // the edit UI already hides the input for everyone else).
@@ -465,24 +477,27 @@ export async function updateEmployeePersonal(employeeId: number, input: Personal
     try {
         if (includeRetirement) {
             await query(
-                `update employees set date_of_birth=$1, hire_date=$2, position_effective_date=$3, nationality=$4, gender=$5, job_grade=$6, retirement_age=$7, updated_at=CURRENT_TIMESTAMP
-                 where employee_id=$8`,
-                [input.date_of_birth || null, input.hire_date || null, input.position_effective_date || null,
-                 input.nationality?.trim() || null, input.gender || null, input.job_grade?.trim() || null,
+                `update employees set name=$1, date_of_birth=$2, hire_date=$3, position_effective_date=$4, nationality=$5, gender=$6, job_grade=$7, readiness_potential=$8, country=$9, city=$10, retirement_age=$11, updated_at=CURRENT_TIMESTAMP
+                 where employee_id=$12`,
+                [input.name.trim(), input.date_of_birth || null, input.hire_date || null, input.position_effective_date || null,
+                 input.nationality?.trim() || null, input.gender || null, input.job_grade?.trim() || null, input.readiness_potential || null,
+                 input.country?.trim() || null, input.city?.trim() || null,
                  input.retirement_age, employeeId]
             );
         } else {
             await query(
-                `update employees set date_of_birth=$1, hire_date=$2, position_effective_date=$3, nationality=$4, gender=$5, job_grade=$6, updated_at=CURRENT_TIMESTAMP
-                 where employee_id=$7`,
-                [input.date_of_birth || null, input.hire_date || null, input.position_effective_date || null,
-                 input.nationality?.trim() || null, input.gender || null, input.job_grade?.trim() || null, employeeId]
+                `update employees set name=$1, date_of_birth=$2, hire_date=$3, position_effective_date=$4, nationality=$5, gender=$6, job_grade=$7, readiness_potential=$8, country=$9, city=$10, updated_at=CURRENT_TIMESTAMP
+                 where employee_id=$11`,
+                [input.name.trim(), input.date_of_birth || null, input.hire_date || null, input.position_effective_date || null,
+                 input.nationality?.trim() || null, input.gender || null, input.job_grade?.trim() || null, input.readiness_potential || null,
+                 input.country?.trim() || null, input.city?.trim() || null, employeeId]
             );
         }
     } catch (err: any) {
         return { ok: false, error: err.message };
     }
     revalidatePath(`/employees/${employeeId}`);
+    revalidatePath("/employees");
     return { ok: true };
 }
 
@@ -549,12 +564,21 @@ export interface CompensationInput {
     allowance_family_cover: string | null;
 }
 
-// Total Compensation is always derived (base + STI target + LTI target + other
-// bonus — the same "D8" formula used app-wide, e.g. comparison_v2's scenarioTotalOf),
-// never a freely-typed field, so it can never drift from the line items.
+// Total Compensation is always derived, never a freely-typed field, so it
+// can never drift from the line items. Client feedback (C10): this used to
+// only add base + STI target + LTI target + other bonus (the narrower "D8"
+// figure comparison_v2's scenarioTotalOf and lib/format.ts's
+// compensationOnly() deliberately compute, for comparing scenarios on an
+// equal cash-only basis) and silently dropped all 4 allowance fields that
+// sit right next to it on this same card.
+function totalCompensationOf(c: { base_salary?: number | null; sti_target?: number | null; lti_target?: number | null; other_bonus?: number | null; allowance_company_car?: number | null; allowance_mobility?: number | null; allowance_home_office?: number | null; allowance_private_medical?: number | null }): number {
+    return (c.base_salary ?? 0) + (c.sti_target ?? 0) + (c.lti_target ?? 0) + (c.other_bonus ?? 0)
+        + (c.allowance_company_car ?? 0) + (c.allowance_mobility ?? 0) + (c.allowance_home_office ?? 0) + (c.allowance_private_medical ?? 0);
+}
+
 export async function updateEmployeeCompensation(employeeId: number, input: CompensationInput): Promise<{ ok: boolean; error?: string }> {
     try { await requireCompEditor(); } catch (e: any) { return { ok: false, error: e.message }; }
-    const total_compensation = (input.base_salary ?? 0) + (input.sti_target ?? 0) + (input.lti_target ?? 0) + (input.other_bonus ?? 0);
+    const total_compensation = totalCompensationOf(input);
     try {
         await query(
             `insert into employee_compensation
@@ -704,4 +728,21 @@ export async function deleteEmployee(employeeId: number): Promise<{ ok: boolean;
     revalidatePath("/org/headcount");
     revalidatePath("/org/succession");
     return { ok: true };
+}
+
+// Bulk delete from the Employees list (client feedback: deleting test/mock-up
+// records one profile at a time was impractical). Each employee still goes
+// through the exact same deleteEmployee() - same per-person cleanup of
+// everything that could reference them - just sequentially, not in one
+// shared transaction, so one failure doesn't roll back the others that
+// already succeeded.
+export async function deleteEmployees(employeeIds: number[]): Promise<{ ok: boolean; deleted: number; errors: { employeeId: number; message: string }[] }> {
+    const errors: { employeeId: number; message: string }[] = [];
+    let deleted = 0;
+    for (const id of employeeIds) {
+        const res = await deleteEmployee(id);
+        if (res.ok) deleted++;
+        else errors.push({ employeeId: id, message: res.error || "Delete failed" });
+    }
+    return { ok: errors.length === 0, deleted, errors };
 }

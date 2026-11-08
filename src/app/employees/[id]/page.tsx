@@ -125,7 +125,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                 <Tabs defaultValue="profile">
                     <TabsList>
                         <TabsTrigger value="profile">Profile</TabsTrigger>
-                        <TabsTrigger value="icpd">ICPD</TabsTrigger>
+                        <TabsTrigger value="icpd">ICDP</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="profile" className="space-y-4">
@@ -137,6 +137,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                         <PersonalEmploymentCard
                             employeeId={emp.employee_id}
                             data={{
+                                name: emp.name,
                                 date_of_birth: emp.date_of_birth,
                                 hire_date: emp.hire_date,
                                 position_effective_date: emp.position_effective_date,
@@ -145,6 +146,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                                 country: emp.country,
                                 city: emp.city,
                                 job_grade: emp.job_grade,
+                                readiness_potential: emp.readiness_potential,
                                 retirement_age: emp.retirement_age,
                             }}
                             canSeePersonal={canEditPersonal}

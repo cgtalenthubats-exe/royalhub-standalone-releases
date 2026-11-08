@@ -412,7 +412,6 @@ function NewNodeRow({ row, offices, positions, functions, bannerId, bannerName, 
     const bannerMismatch = !!(row.banner_text && bannerName && nameSimilarity(row.banner_text, bannerName) < 0.5);
 
     async function submitOffice() {
-        if (!officeDraft.country.trim()) { toast.error("Country is required"); return; }
         setSavingOffice(true);
         const res = await createCompanyOffice({ banner_name: bannerName, country: officeDraft.country, city: officeDraft.city || null });
         setSavingOffice(false);

@@ -51,7 +51,20 @@ export function ImportReviewDialog({ open, onOpenChange, rows, functions, onComm
     const needsResolution = rows.filter((r) => !r.invalidReason && !r.duplicate && (r.needsOffice || r.needsPosition));
     const ready = rows.filter((r) => !r.invalidReason && !r.duplicate && !r.needsOffice && !r.needsPosition);
 
-    const importCount = useMemo(() => [...state.values()].filter((s) => s.decision === "import").length, [state]);
+    // A row marked "import" that still needs office/position resolution
+    // used to commit anyway with a null office_id/banner_id and crash on a
+    // NOT NULL constraint - duplicate rows especially, since they used to
+    // have no UI at all to fix a missing office (see needsResolution's
+    // `!r.duplicate` filter below). This is the hard backstop: no row is
+    // ever actually sent to commitEmployeesCsv unresolved, regardless of
+    // what decision state got into.
+    function isRowReady(row: AnalyzedCsvRow, s: RowState): boolean {
+        if (s.decision !== "import") return false;
+        if (row.needsOffice && s.officeId == null) return false;
+        if (row.needsPosition && s.positionId == null) return false;
+        return true;
+    }
+    const importCount = useMemo(() => rows.filter((r) => isRowReady(r, state.get(r.rowNo)!)).length, [rows, state]);
 
     function setDecision(rowNo: number, decision: RowState["decision"]) {
         setState((prev) => new Map(prev).set(rowNo, { ...prev.get(rowNo)!, decision }));
@@ -74,7 +87,7 @@ export function ImportReviewDialog({ open, onOpenChange, rows, functions, onComm
 
     async function commit() {
         const toCommit: CommitCsvRow[] = rows
-            .filter((r) => state.get(r.rowNo)!.decision === "import")
+            .filter((r) => isRowReady(r, state.get(r.rowNo)!))
             .map((r) => {
                 const s = state.get(r.rowNo)!;
                 return {
@@ -105,7 +118,12 @@ export function ImportReviewDialog({ open, onOpenChange, rows, functions, onComm
                         <Section title="Possible duplicates" count={duplicates.length} tone="amber" icon={<Users2 className="h-3.5 w-3.5" />}>
                             <p className="mb-2 text-slate-400">Name closely matches someone already in the system — confirm before importing as a new person.</p>
                             {duplicates.map((r) => (
-                                <DuplicateRow key={r.rowNo} row={r} decision={state.get(r.rowNo)!.decision} onDecide={(d) => setDecision(r.rowNo, d)} />
+                                <DuplicateRow
+                                    key={r.rowNo} row={r} functions={functions}
+                                    rowState={state.get(r.rowNo)!}
+                                    onResolved={(patch) => setResolved(r.rowNo, patch)}
+                                    onDecide={(d) => setDecision(r.rowNo, d)}
+                                />
                             ))}
                         </Section>
                     )}
@@ -172,28 +190,15 @@ function Section({ title, count, tone, icon, children }: { title: string; count:
     );
 }
 
-function DuplicateRow({ row, decision, onDecide }: { row: AnalyzedCsvRow; decision: RowState["decision"]; onDecide: (d: RowState["decision"]) => void }) {
-    const d = row.duplicate!;
-    return (
-        <div className="mb-1.5 rounded-lg border p-2.5">
-            <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                    <div className="font-medium text-[#0f172a]">{row.name} <span className="text-slate-400">(row {row.rowNo})</span></div>
-                    <div className="text-[11px] text-slate-400">Matches: {d.name} · {d.positionTitle || "—"} · {d.bannerName || "—"} ({Math.round(d.score * 100)}% match)</div>
-                </div>
-                <div className="flex shrink-0 gap-1">
-                    <Button size="sm" variant={decision === "skip" ? "default" : "outline"} className="h-7 text-xs" onClick={() => onDecide("skip")}>Skip</Button>
-                    <Button size="sm" variant={decision === "import" ? "default" : "outline"} className="h-7 text-xs" onClick={() => onDecide("import")}>Import anyway</Button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function ResolveRow({ row, functions, rowState, onResolved, onDecide }: {
+// Shared by DuplicateRow and ResolveRow — a duplicate-matched row can ALSO
+// be missing its office/position (reported directly: a CSV "Company" that
+// doesn't exactly match a real banner name resolves to nothing, and that
+// used to have no UI to fix on a duplicate row at all - "Import anyway"
+// would commit with a null office_id/banner_id and crash on a NOT NULL
+// constraint). Same office/position quick-add either way now.
+function OfficePositionResolver({ row, functions, rowState, onResolved }: {
     row: AnalyzedCsvRow; functions: FunctionOpt[]; rowState: RowState;
     onResolved: (patch: Partial<Pick<RowState, "officeId" | "positionId" | "bannerId">>) => void;
-    onDecide: (d: RowState["decision"]) => void;
 }) {
     const [addingOffice, setAddingOffice] = useState(false);
     const [officeDraft, setOfficeDraft] = useState({ banner_name: row.companyName, country: row.countryName, city: "" });
@@ -205,7 +210,6 @@ function ResolveRow({ row, functions, rowState, onResolved, onDecide }: {
 
     const officeResolved = !row.needsOffice || rowState.officeId != null;
     const positionResolved = !row.needsPosition || rowState.positionId != null;
-    const resolved = officeResolved && positionResolved;
 
     async function submitOffice() {
         if (!officeDraft.banner_name.trim() || !officeDraft.country.trim()) { toast.error("Company and country are required"); return; }
@@ -233,16 +237,7 @@ function ResolveRow({ row, functions, rowState, onResolved, onDecide }: {
     }
 
     return (
-        <div className="mb-1.5 rounded-lg border p-2.5">
-            <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 font-medium text-[#0f172a]">{row.name} <span className="text-slate-400 font-normal">(row {row.rowNo})</span></div>
-                <div className="flex shrink-0 items-center gap-1">
-                    {resolved
-                        ? <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700"><Check className="h-3.5 w-3.5" /> Ready</span>
-                        : <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onDecide("skip")}>Skip</Button>}
-                </div>
-            </div>
-
+        <>
             {row.needsOffice && !officeResolved && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                     <div className="mb-1 text-[11px] text-slate-400">"{row.companyName}" has no office in "{row.countryName}"</div>
@@ -283,6 +278,64 @@ function ResolveRow({ row, functions, rowState, onResolved, onDecide }: {
                     )}
                 </div>
             )}
+        </>
+    );
+}
+
+function DuplicateRow({ row, functions, rowState, onResolved, onDecide }: {
+    row: AnalyzedCsvRow; functions: FunctionOpt[]; rowState: RowState;
+    onResolved: (patch: Partial<Pick<RowState, "officeId" | "positionId" | "bannerId">>) => void;
+    onDecide: (d: RowState["decision"]) => void;
+}) {
+    const d = row.duplicate!;
+    const needsFix = row.needsOffice || row.needsPosition;
+    const officeResolved = !row.needsOffice || rowState.officeId != null;
+    const positionResolved = !row.needsPosition || rowState.positionId != null;
+    const resolved = officeResolved && positionResolved;
+    return (
+        <div className="mb-1.5 rounded-lg border p-2.5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                    <div className="font-medium text-[#0f172a]">{row.name} <span className="text-slate-400">(row {row.rowNo})</span></div>
+                    <div className="text-[11px] text-slate-400">Matches: {d.name} · {d.positionTitle || "—"} · {d.bannerName || "—"} ({Math.round(d.score * 100)}% match)</div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                    <Button size="sm" variant={rowState.decision === "skip" ? "default" : "outline"} className="h-7 text-xs" onClick={() => onDecide("skip")}>Skip</Button>
+                    <Button
+                        size="sm" variant={rowState.decision === "import" ? "default" : "outline"} className="h-7 text-xs"
+                        disabled={needsFix && !resolved}
+                        title={needsFix && !resolved ? "Resolve the company/office or position below first" : undefined}
+                        onClick={() => onDecide("import")}
+                    >
+                        Import anyway
+                    </Button>
+                </div>
+            </div>
+            {needsFix && <OfficePositionResolver row={row} functions={functions} rowState={rowState} onResolved={onResolved} />}
+        </div>
+    );
+}
+
+function ResolveRow({ row, functions, rowState, onResolved, onDecide }: {
+    row: AnalyzedCsvRow; functions: FunctionOpt[]; rowState: RowState;
+    onResolved: (patch: Partial<Pick<RowState, "officeId" | "positionId" | "bannerId">>) => void;
+    onDecide: (d: RowState["decision"]) => void;
+}) {
+    const officeResolved = !row.needsOffice || rowState.officeId != null;
+    const positionResolved = !row.needsPosition || rowState.positionId != null;
+    const resolved = officeResolved && positionResolved;
+
+    return (
+        <div className="mb-1.5 rounded-lg border p-2.5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 font-medium text-[#0f172a]">{row.name} <span className="text-slate-400 font-normal">(row {row.rowNo})</span></div>
+                <div className="flex shrink-0 items-center gap-1">
+                    {resolved
+                        ? <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700"><Check className="h-3.5 w-3.5" /> Ready</span>
+                        : <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onDecide("skip")}>Skip</Button>}
+                </div>
+            </div>
+            <OfficePositionResolver row={row} functions={functions} rowState={rowState} onResolved={onResolved} />
         </div>
     );
 }

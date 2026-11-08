@@ -61,7 +61,7 @@ export function ProfileActions({ employee, canSeePersonal }: { employee: Employe
                 <Printer className="h-3.5 w-3.5" /> Print / PDF
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={exportIcpd} disabled={exporting}>
-                {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileOutput className="h-3.5 w-3.5" />} Export ICPD
+                {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileOutput className="h-3.5 w-3.5" />} Export ICDP
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5 text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => { setConfirmName(""); setDeleteOpen(true); }}>
                 <Trash2 className="h-3.5 w-3.5" />
@@ -72,7 +72,7 @@ export function ProfileActions({ employee, canSeePersonal }: { employee: Employe
                     <DialogHeader><DialogTitle>Delete {employee.name}?</DialogTitle></DialogHeader>
                     <div className="space-y-3">
                         <p className="text-[13px] text-slate-600">
-                            This permanently removes their profile, compensation, performance history, ICPD data, and any documents.
+                            This permanently removes their profile, compensation, performance history, ICDP data, and any documents.
                             This can't be undone.
                         </p>
                         <div>

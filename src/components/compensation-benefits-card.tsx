@@ -7,54 +7,68 @@ import { updateEmployeeCompensation } from "@/app/actions/employee-crud";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CommaNumberInput } from "@/components/ui/comma-number-input";
+import { DualModeMoneyInput, type MoneyMode } from "@/components/ui/dual-mode-money-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/format";
 import { Money, useCompVisibility } from "@/components/comp-visibility";
 import { Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-// STI/LTI are entered as % of base (how a bonus target is always talked
-// about, and how Compensation History / Proposals already do it elsewhere in
-// the app) — € is only ever a derived readout, never typed directly.
-const PCT_KEYS = new Set(["sti_target", "sti_max", "lti_target", "lti_max"]);
 const OTHER_BENEFIT_LABEL = "Other benefit (please specify)";
-const FIELDS = [
-    { key: "base_salary", label: "Base / Salary" },
-    { key: "sti_target", label: "STI Target" },
-    { key: "sti_max", label: "STI Max" },
-    { key: "lti_target", label: "LTI Target" },
-    { key: "lti_max", label: "LTI Max" },
+
+// STI/LTI support dual %/€ entry (C10) - both DualKey fields below carry a
+// {pct, amount, mode} triple in the draft instead of one plain number.
+type DualKey = "sti_target" | "sti_max" | "lti_target" | "lti_max";
+const DUAL_KEYS: DualKey[] = ["sti_target", "sti_max", "lti_target", "lti_max"];
+const DUAL_LABELS: Record<DualKey, string> = { sti_target: "STI Target", sti_max: "STI Max", lti_target: "LTI Target", lti_max: "LTI Max" };
+
+const MONEY_FIELDS = [
     { key: "other_bonus", label: "Other Bonus" },
     { key: "allowance_company_car", label: "Allowance · Company Car" },
     { key: "allowance_mobility", label: "Allowance · Mobile" },
     { key: "allowance_home_office", label: "Allowance · Housing" },
     { key: "allowance_private_medical", label: "Benefit · Medical" },
 ] as const;
+type MoneyKey = (typeof MONEY_FIELDS)[number]["key"];
 // allowance_family_cover is free text ("Other benefit — please specify", not a
-// € amount — see migration 023), so it's kept out of FIELDS (which drives the
-// uniform numeric Draft below) and handled as its own bit of state instead.
+// € amount — see migration 023), so it's kept out of the numeric fields and
+// handled as its own bit of state instead.
 
-type Draft = Record<(typeof FIELDS)[number]["key"], number | "">;
+// All fields in display order, used for the read-only table.
+const DISPLAY_FIELDS: { key: DualKey | MoneyKey | "base_salary"; label: string; isDual: boolean }[] = [
+    { key: "base_salary", label: "Base / Salary", isDual: false },
+    { key: "sti_target", label: "STI Target", isDual: true },
+    { key: "sti_max", label: "STI Max", isDual: true },
+    { key: "lti_target", label: "LTI Target", isDual: true },
+    { key: "lti_max", label: "LTI Max", isDual: true },
+    { key: "other_bonus", label: "Other Bonus", isDual: false },
+    { key: "allowance_company_car", label: "Allowance · Company Car", isDual: false },
+    { key: "allowance_mobility", label: "Allowance · Mobile", isDual: false },
+    { key: "allowance_home_office", label: "Allowance · Housing", isDual: false },
+    { key: "allowance_private_medical", label: "Benefit · Medical", isDual: false },
+];
 
-// Draft holds % for the four bonus fields, € for everything else — convert
-// the stored € back to a % (relative to the stored base) when opening the edit form.
-// Rounded to 2dp, not a whole number — found a real bug: rounding to a whole
-// % (e.g. 60,000/170,000 -> "35%") and then recomputing € from that on save
-// silently turned 60,000 into 59,500 even when the user never touched this
-// field. 2dp shrinks that round-trip error from hundreds of euros to single
-// digits; save() below also skips the round-trip entirely for any field the
-// user didn't actually edit (see dirtyPct), so an untouched field can't drift
-// at all regardless of rounding.
+type DualFieldDraft = { pct: number | ""; amount: number | ""; mode: MoneyMode };
+type Draft = { base_salary: number | "" } & Record<DualKey, DualFieldDraft> & Record<MoneyKey, number | "">;
+
 function toDraft(c: Compensation | null): Draft {
-    const d = {} as Draft;
     const base = c?.base_salary ?? 0;
-    FIELDS.forEach((f) => {
-        const raw = (c?.[f.key] as number | null) ?? null;
-        if (PCT_KEYS.has(f.key) && raw != null && base) d[f.key] = Math.round((raw / base) * 10000) / 100;
-        else if (PCT_KEYS.has(f.key)) d[f.key] = "";
-        else d[f.key] = raw ?? "";
+    const dual = {} as Record<DualKey, DualFieldDraft>;
+    DUAL_KEYS.forEach((k) => {
+        const amt = (c?.[k] as number | null) ?? null;
+        // Rounded to 2dp, not a whole number - rounding to a whole % (e.g.
+        // 60,000/170,000 -> "35%") and then recomputing € from that on save
+        // silently turned 60,000 into 59,500 even when the person never
+        // touched this field. The original € stays untouched (amount below)
+        // unless the person actually edits this pair, so a field nobody
+        // touched can't drift regardless of rounding.
+        const pct = amt != null && base ? Math.round((amt / base) * 10000) / 100 : "";
+        dual[k] = { pct: pct === "" ? "" : pct, amount: amt ?? "", mode: "pct" };
     });
-    return d;
+    const money = {} as Record<MoneyKey, number | "">;
+    MONEY_FIELDS.forEach((f) => { money[f.key] = (c?.[f.key] as number | null) ?? ""; });
+    return { base_salary: c?.base_salary ?? "", ...dual, ...money };
 }
 
 export function CompensationBenefitsCard({ employeeId, compensation, totalCompensation, canEdit = true }: {
@@ -65,36 +79,35 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
     const [saving, setSaving] = useState(false);
     const [draft, setDraft] = useState<Draft>(toDraft(compensation));
     const [otherBenefit, setOtherBenefit] = useState(compensation?.allowance_family_cover || "");
-    // Which PCT_KEYS fields the user has actually edited this time round —
-    // save() uses this to leave any untouched bonus field's € exactly as
-    // stored, instead of round-tripping it through % and back (see toDraft's
-    // comment for why that round-trip isn't safe to do unconditionally).
-    const [dirtyPct, setDirtyPct] = useState<Set<string>>(new Set());
 
-    function openEdit() { setDraft(toDraft(compensation)); setOtherBenefit(compensation?.allowance_family_cover || ""); setDirtyPct(new Set()); setOpen(true); }
+    function openEdit() { setDraft(toDraft(compensation)); setOtherBenefit(compensation?.allowance_family_cover || ""); setOpen(true); }
 
     const draftBase = Number(draft.base_salary) || 0;
-    const pctToAmt = (pct: number | "") => (pct === "" || !draftBase ? 0 : Math.round((draftBase * Number(pct)) / 100));
-    // The € that will actually be saved for a bonus field: recomputed from its
-    // % only if the user touched it, otherwise the original stored € untouched.
-    function effectiveAmt(key: "sti_target" | "sti_max" | "lti_target" | "lti_max"): number {
-        if (dirtyPct.has(key)) return pctToAmt(draft[key]);
-        return (compensation?.[key] as number | null) ?? 0;
+    function setDual(key: DualKey, next: { pct: number | ""; amount: number | "" }) {
+        setDraft((prev) => ({ ...prev, [key]: { ...prev[key], ...next } }));
     }
-    const draftTotal = draftBase + effectiveAmt("sti_target") + effectiveAmt("lti_target") + (Number(draft.other_bonus) || 0);
+    function setDualMode(key: DualKey, mode: MoneyMode) {
+        setDraft((prev) => ({ ...prev, [key]: { ...prev[key], mode } }));
+    }
+
+    // Client feedback (C10): total was silently dropping all 4 allowance
+    // fields, even though they're right here on this same card. Max isn't
+    // added in - it's a ceiling, not a paid amount.
+    const draftTotal = draftBase + (Number(draft.sti_target.amount) || 0) + (Number(draft.lti_target.amount) || 0)
+        + (Number(draft.other_bonus) || 0)
+        + (Number(draft.allowance_company_car) || 0) + (Number(draft.allowance_mobility) || 0)
+        + (Number(draft.allowance_home_office) || 0) + (Number(draft.allowance_private_medical) || 0);
 
     async function save() {
         setSaving(true);
         const num = (v: number | "") => (v === "" ? null : v);
-        const pctField = (key: "sti_target" | "sti_max" | "lti_target" | "lti_max") =>
-            draft[key] === "" ? null : effectiveAmt(key);
         const res = await updateEmployeeCompensation(employeeId, {
             currency: compensation?.currency || "EUR",
             base_salary: num(draft.base_salary),
-            sti_target: pctField("sti_target"),
-            sti_max: pctField("sti_max"),
-            lti_target: pctField("lti_target"),
-            lti_max: pctField("lti_max"),
+            sti_target: num(draft.sti_target.amount),
+            sti_max: num(draft.sti_max.amount),
+            lti_target: num(draft.lti_target.amount),
+            lti_max: num(draft.lti_max.amount),
             other_bonus: num(draft.other_bonus),
             allowance_company_car: num(draft.allowance_company_car),
             allowance_mobility: num(draft.allowance_mobility),
@@ -116,7 +129,7 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
     };
     const rows: [string, number | null | undefined, string | null][] = [
         ["Compensation (Total)", totalCompensation, null],
-        ...FIELDS.map((f) => [f.label, c?.[f.key], PCT_KEYS.has(f.key) ? pctOfBase(c?.[f.key] as number | null) : null] as [string, number | null | undefined, string | null]),
+        ...DISPLAY_FIELDS.map((f) => [f.label, c?.[f.key as keyof Compensation] as number | null | undefined, f.isDual ? pctOfBase(c?.[f.key as keyof Compensation] as number | null) : null] as [string, number | null | undefined, string | null]),
     ];
     const otherBenefitVis = useCompVisibility();
 
@@ -156,35 +169,36 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                 <DialogContent className="max-h-[85vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Edit Compensation &amp; Benefits</DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {FIELDS.map((f) => {
-                            const isPct = PCT_KEYS.has(f.key);
-                            return (
-                                <div key={f.key}>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">{f.label} ({isPct ? "%" : "€"})</label>
-                                    <Input
-                                        type="number"
-                                        value={draft[f.key]}
-                                        onChange={(e) => {
-                                            setDraft({ ...draft, [f.key]: e.target.value === "" ? "" : Number(e.target.value) });
-                                            if (isPct) setDirtyPct((prev) => new Set(prev).add(f.key));
-                                        }}
-                                    />
-                                    {isPct && draft[f.key] !== "" && draftBase > 0 && (
-                                        <div className="mt-0.5 text-[10.5px] text-slate-400">
-                                            = €{(dirtyPct.has(f.key) ? pctToAmt(draft[f.key]) : effectiveAmt(f.key as "sti_target" | "sti_max" | "lti_target" | "lti_max")).toLocaleString()}
-                                            {!dirtyPct.has(f.key) && <span className="italic"> (unchanged)</span>}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Base / Salary (€)</label>
+                            <CommaNumberInput value={draft.base_salary} onChange={(v) => setDraft({ ...draft, base_salary: v })} />
+                        </div>
+                        {DUAL_KEYS.map((k) => (
+                            <div key={k}>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">{DUAL_LABELS[k]}</label>
+                                <DualModeMoneyInput
+                                    mode={draft[k].mode}
+                                    onModeChange={(m) => setDualMode(k, m)}
+                                    pct={draft[k].pct}
+                                    amount={draft[k].amount}
+                                    base={draftBase}
+                                    onChange={(next) => setDual(k, next)}
+                                />
+                            </div>
+                        ))}
+                        {MONEY_FIELDS.map((f) => (
+                            <div key={f.key}>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">{f.label} (€)</label>
+                                <CommaNumberInput value={draft[f.key]} onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
+                            </div>
+                        ))}
                         <div className="sm:col-span-2">
                             <label className="mb-1 block text-xs font-medium text-slate-600">{OTHER_BENEFIT_LABEL}</label>
                             <Input value={otherBenefit} onChange={(e) => setOtherBenefit(e.target.value)} placeholder="e.g. gym membership, transport pass…" />
                         </div>
                     </div>
                     <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total Comp (base + STI + LTI + other bonus)</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total Comp (base + STI + LTI + other bonus + allowances)</span>
                         <span className="text-[15px] font-extrabold tabular-nums text-[#0b1f3a]">{formatCurrency(draftTotal)}</span>
                     </div>
                     <DialogFooter>

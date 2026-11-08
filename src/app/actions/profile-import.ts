@@ -404,7 +404,8 @@ export async function commitProfileImport(rows: CommitProfileEmployee[], merges:
                 if (r.base_salary != null || r.sti_target_pct != null || r.lti_target_pct != null || r.other_bonus != null) {
                     const stiTarget = r.base_salary != null && r.sti_target_pct != null ? Math.round((r.base_salary * r.sti_target_pct) / 100) : null;
                     const ltiTarget = r.base_salary != null && r.lti_target_pct != null ? Math.round((r.base_salary * r.lti_target_pct) / 100) : null;
-                    const total = (r.base_salary ?? 0) + (stiTarget ?? 0) + (ltiTarget ?? 0) + (r.other_bonus ?? 0);
+                    const total = (r.base_salary ?? 0) + (stiTarget ?? 0) + (ltiTarget ?? 0) + (r.other_bonus ?? 0)
+                        + (r.allowance_car ?? 0) + (r.allowance_mobility ?? 0) + (r.allowance_home_office ?? 0) + (r.allowance_private_medical ?? 0);
                     await client.query(
                         `insert into employee_compensation
                             (employee_id, currency, base_salary, sti_target, lti_target, other_bonus,

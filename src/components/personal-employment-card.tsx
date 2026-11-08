@@ -6,6 +6,7 @@ import { updateEmployeePersonal } from "@/app/actions/employee-crud";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PrecisionDateInput } from "@/components/precision-date-input";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatDate, formatYears, calcAge, estimatedRetirementDate, yearsUntil } from "@/lib/format";
@@ -14,6 +15,7 @@ import { Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export interface PersonalEmploymentData {
+    name: string;
     date_of_birth: string | null;
     hire_date: string | null;
     position_effective_date: string | null;
@@ -22,6 +24,7 @@ export interface PersonalEmploymentData {
     country: string | null;
     city: string | null;
     job_grade: string | null;
+    readiness_potential: string | null;
     retirement_age: number | null;
 }
 
@@ -39,12 +42,16 @@ export function PersonalEmploymentCard({ employeeId, data, canSeePersonal = true
     async function save() {
         setSaving(true);
         const res = await updateEmployeePersonal(employeeId, {
+            name: draft.name,
             date_of_birth: draft.date_of_birth,
             hire_date: draft.hire_date,
             position_effective_date: draft.position_effective_date,
             nationality: draft.nationality,
             gender: draft.gender,
             job_grade: draft.job_grade,
+            readiness_potential: draft.readiness_potential,
+            country: draft.country,
+            city: draft.city,
             ...(canSeePersonal ? { retirement_age: draft.retirement_age } : {}),
         });
         setSaving(false);
@@ -60,7 +67,7 @@ export function PersonalEmploymentCard({ employeeId, data, canSeePersonal = true
         ["Years in Position", formatYears(data.position_effective_date)],
         ["Nationality", data.nationality || "-"],
         ["Gender", data.gender || "-"],
-        ["Country / City", [data.country, data.city].filter(Boolean).join(" · ") || "-"],
+        ["Location", [data.country, data.city].filter(Boolean).join(" · ") || "-"],
         ["Job Grade", data.job_grade || "-"],
     ];
     if (canSeePersonal) {
@@ -95,17 +102,21 @@ export function PersonalEmploymentCard({ employeeId, data, canSeePersonal = true
                 <DialogContent>
                     <DialogHeader><DialogTitle>Edit Personal &amp; Employment</DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Name</label>
+                            <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                        </div>
                         <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Date of Birth</label>
-                            <Input type="date" value={draft.date_of_birth || ""} onChange={(e) => setDraft({ ...draft, date_of_birth: e.target.value || null })} />
+                            <PrecisionDateInput value={draft.date_of_birth} onChange={(v) => setDraft({ ...draft, date_of_birth: v || null })} />
                         </div>
                         <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Hire Date</label>
-                            <Input type="date" value={draft.hire_date || ""} onChange={(e) => setDraft({ ...draft, hire_date: e.target.value || null })} />
+                            <PrecisionDateInput value={draft.hire_date} onChange={(v) => setDraft({ ...draft, hire_date: v || null })} />
                         </div>
                         <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Current Job Effective Date</label>
-                            <Input type="date" value={draft.position_effective_date || ""} onChange={(e) => setDraft({ ...draft, position_effective_date: e.target.value || null })} />
+                            <PrecisionDateInput value={draft.position_effective_date} onChange={(v) => setDraft({ ...draft, position_effective_date: v || null })} />
                         </div>
                         <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Job Grade</label>
@@ -116,12 +127,26 @@ export function PersonalEmploymentCard({ employeeId, data, canSeePersonal = true
                             <Combobox options={COUNTRIES} value={draft.nationality || null} onChange={(v) => setDraft({ ...draft, nationality: v || "" })} placeholder="Select…" searchPlaceholder="Search or type new…" />
                         </div>
                         <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600" title="Where this person actually sits - independent of which company/office they're assigned to.">Location (country)</label>
+                            <Combobox options={COUNTRIES} value={draft.country || null} onChange={(v) => setDraft({ ...draft, country: v || "" })} placeholder="Select…" searchPlaceholder="Search or type new…" />
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Location (city)</label>
+                            <Input value={draft.city || ""} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="optional" />
+                        </div>
+                        <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Gender</label>
                             <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={draft.gender || ""} onChange={(e) => setDraft({ ...draft, gender: e.target.value || null })}>
                                 <option value="">—</option>
                                 <option value="Male">Male</option>
                                 <option value="Female">Female</option>
                                 <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600" title="Succession-readiness rating — feeds the Readiness Pipeline breakdown on the dashboard and the Succession Plan pages.">Readiness</label>
+                            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={draft.readiness_potential || "Medium"} onChange={(e) => setDraft({ ...draft, readiness_potential: e.target.value })}>
+                                <option>High</option><option>Medium</option><option>Low</option>
                             </select>
                         </div>
                         {canSeePersonal && (
@@ -136,7 +161,6 @@ export function PersonalEmploymentCard({ employeeId, data, canSeePersonal = true
                             </div>
                         )}
                     </div>
-                    <p className="text-[11px] text-slate-400">Country / City follow the employee's office assignment — move them on an org chart to change those.</p>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                         <Button onClick={save} disabled={saving} className="gap-1.5">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Save</Button>

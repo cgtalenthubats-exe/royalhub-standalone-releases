@@ -10,8 +10,8 @@ const EMPLOYEE_COMPENSATION_FIELDS = [
 ] as const;
 
 const COMPENSATION_HISTORY_FIELDS = [
-    "base_salary", "total_comp", "sti_eligible_pct", "sti_actual_pct", "sti_amount",
-    "lti_eligible_pct", "lti_actual_pct", "lti_amount",
+    "base_salary", "total_comp", "sti_eligible_pct", "sti_eligible_amount", "sti_actual_pct", "sti_amount",
+    "lti_eligible_pct", "lti_eligible_amount", "lti_actual_pct", "lti_amount", "other_bonus",
 ] as const;
 
 const PROPOSAL_COMPENSATION_FIELDS = [

@@ -13,21 +13,39 @@ export interface CompensationHistoryEntry {
     base_salary: number | null;
     cash_allowance: number | null;
     sti_eligible_pct: number | null; // target the person was entitled to
+    sti_eligible_amount: number | null; // display-only € equivalent; not counted in total_comp
     sti_actual_pct: number | null;   // what was actually achieved/paid
-    sti_amount: number | null;       // derived: actual% × base
+    sti_amount: number | null;       // € actual - amount and % stay in sync, see CompHistoryInput
     lti_eligible_pct: number | null;
+    lti_eligible_amount: number | null;
     lti_actual_pct: number | null;
     lti_amount: number | null;
-    pension_contribution: number | null;
-    total_comp: number | null;       // derived: base + sti + lti
+    pension_contribution: number | null; // € - stored source of truth
+    pension_pct: number | null;          // display-only equivalent of pension_contribution
+    other_bonus: number | null;
+    total_comp: number | null;       // derived: everything above, prorated by effective_date
     note: string | null;
 }
 
-// The two bonus euro figures and the total are always derived so the stored
-// numbers can never drift from the entered percentages.
-function derive(base: number | null, actualPct: number | null): number | null {
-    if (base == null || actualPct == null) return null;
-    return Math.round((base * actualPct) / 100);
+// Client feedback: an effective date mid-year was saved but had no effect on
+// the total - the row counted as a full fiscal year regardless. Assumes a
+// calendar-year fiscal year (Jan 1 - Dec 31 of fiscal_year), the only
+// convention this app uses anywhere else (no other fiscal-year-start
+// setting exists to read instead). 1.0 = full year (no effective date, or
+// one on/before Jan 1); 0.0 = effective date after the year already ended.
+function prorationFraction(fiscalYear: number, effectiveDate: string | null): number {
+    if (!effectiveDate) return 1;
+    const d = new Date(effectiveDate);
+    if (isNaN(d.getTime())) return 1;
+    const MS_PER_DAY = 86400000;
+    const yearStart = Date.UTC(fiscalYear, 0, 1);
+    const yearEnd = Date.UTC(fiscalYear, 11, 31);
+    const effective = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    if (effective <= yearStart) return 1;
+    if (effective > yearEnd) return 0;
+    const totalDays = Math.round((yearEnd - yearStart) / MS_PER_DAY) + 1;
+    const daysRemaining = Math.round((yearEnd - effective) / MS_PER_DAY) + 1;
+    return daysRemaining / totalDays;
 }
 
 export type CompHistoryInput = {
@@ -36,17 +54,35 @@ export type CompHistoryInput = {
     base_salary: number | null;
     cash_allowance: number | null;
     sti_eligible_pct: number | null;
+    sti_eligible_amount: number | null;
     sti_actual_pct: number | null;
+    sti_amount: number | null;
     lti_eligible_pct: number | null;
+    lti_eligible_amount: number | null;
     lti_actual_pct: number | null;
+    lti_amount: number | null;
     pension_contribution: number | null;
+    pension_pct: number | null;
+    other_bonus: number | null;
     note: string | null;
 }
 
 function toRow(employeeId: number, input: CompHistoryInput) {
-    const sti_amount = derive(input.base_salary, input.sti_actual_pct);
-    const lti_amount = derive(input.base_salary, input.lti_actual_pct);
-    const total_comp = (input.base_salary ?? 0) + (sti_amount ?? 0) + (lti_amount ?? 0);
+    // STI/LTI Actual and Pension now support dual %/amount entry on the
+    // client (whichever side the person typed into is the source of truth
+    // for that save, the other side is the client's own back-conversion for
+    // display) - the server just trusts the € amount it's given instead of
+    // re-deriving it from the %, which used to silently round-trip drift
+    // (e.g. a 2-decimal % stored from a precise € figure, then recomputed
+    // back into a slightly different € figure on the next save).
+    //
+    // Client feedback (B4/C10): total was silently dropping Cash Allowance,
+    // Pension and Other Bonus - it now adds up everything entered on this
+    // row, then applies the effective-date proration on top (B8).
+    const fullYearTotal = (input.base_salary ?? 0) + (input.sti_amount ?? 0) + (input.lti_amount ?? 0)
+        + (input.cash_allowance ?? 0) + (input.pension_contribution ?? 0) + (input.other_bonus ?? 0);
+    const fraction = prorationFraction(input.fiscal_year, input.effective_date);
+    const total_comp = fraction < 1 ? Math.round(fullYearTotal * fraction) : fullYearTotal;
     return {
         employee_id: employeeId,
         fiscal_year: input.fiscal_year,
@@ -54,12 +90,16 @@ function toRow(employeeId: number, input: CompHistoryInput) {
         base_salary: input.base_salary,
         cash_allowance: input.cash_allowance,
         sti_eligible_pct: input.sti_eligible_pct,
+        sti_eligible_amount: input.sti_eligible_amount,
         sti_actual_pct: input.sti_actual_pct,
-        sti_amount,
+        sti_amount: input.sti_amount,
         lti_eligible_pct: input.lti_eligible_pct,
+        lti_eligible_amount: input.lti_eligible_amount,
         lti_actual_pct: input.lti_actual_pct,
-        lti_amount,
+        lti_amount: input.lti_amount,
         pension_contribution: input.pension_contribution,
+        pension_pct: input.pension_pct,
+        other_bonus: input.other_bonus,
         total_comp,
         note: input.note,
     };
@@ -74,25 +114,31 @@ export async function upsertCompensationHistory(employeeId: number, input: CompH
         await query(
             `insert into compensation_history
                 (employee_id, fiscal_year, effective_date, base_salary, cash_allowance,
-                 sti_eligible_pct, sti_actual_pct, sti_amount, lti_eligible_pct, lti_actual_pct, lti_amount,
-                 pension_contribution, total_comp, note)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                 sti_eligible_pct, sti_eligible_amount, sti_actual_pct, sti_amount,
+                 lti_eligible_pct, lti_eligible_amount, lti_actual_pct, lti_amount,
+                 pension_contribution, pension_pct, other_bonus, total_comp, note)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
              on conflict (employee_id, fiscal_year) do update set
                 effective_date = excluded.effective_date,
                 base_salary = excluded.base_salary,
                 cash_allowance = excluded.cash_allowance,
                 sti_eligible_pct = excluded.sti_eligible_pct,
+                sti_eligible_amount = excluded.sti_eligible_amount,
                 sti_actual_pct = excluded.sti_actual_pct,
                 sti_amount = excluded.sti_amount,
                 lti_eligible_pct = excluded.lti_eligible_pct,
+                lti_eligible_amount = excluded.lti_eligible_amount,
                 lti_actual_pct = excluded.lti_actual_pct,
                 lti_amount = excluded.lti_amount,
                 pension_contribution = excluded.pension_contribution,
+                pension_pct = excluded.pension_pct,
+                other_bonus = excluded.other_bonus,
                 total_comp = excluded.total_comp,
                 note = excluded.note`,
             [enc.employee_id, enc.fiscal_year, enc.effective_date, enc.base_salary, enc.cash_allowance,
-             enc.sti_eligible_pct, enc.sti_actual_pct, enc.sti_amount, enc.lti_eligible_pct, enc.lti_actual_pct, enc.lti_amount,
-             enc.pension_contribution, enc.total_comp, enc.note]
+             enc.sti_eligible_pct, enc.sti_eligible_amount, enc.sti_actual_pct, enc.sti_amount,
+             enc.lti_eligible_pct, enc.lti_eligible_amount, enc.lti_actual_pct, enc.lti_amount,
+             enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, enc.note]
         );
     } catch (err: any) {
         return { ok: false, error: err.message };
@@ -110,14 +156,14 @@ export async function updateCompensationHistory(id: number, employeeId: number, 
         await query(
             `update compensation_history set
                 fiscal_year = $1, effective_date = $2, base_salary = $3, cash_allowance = $4,
-                sti_eligible_pct = $5, sti_actual_pct = $6, sti_amount = $7,
-                lti_eligible_pct = $8, lti_actual_pct = $9, lti_amount = $10,
-                pension_contribution = $11, total_comp = $12, note = $13
-             where id = $14 and employee_id = $15`,
+                sti_eligible_pct = $5, sti_eligible_amount = $6, sti_actual_pct = $7, sti_amount = $8,
+                lti_eligible_pct = $9, lti_eligible_amount = $10, lti_actual_pct = $11, lti_amount = $12,
+                pension_contribution = $13, pension_pct = $14, other_bonus = $15, total_comp = $16, note = $17
+             where id = $18 and employee_id = $19`,
             [enc.fiscal_year, enc.effective_date, enc.base_salary, enc.cash_allowance,
-             enc.sti_eligible_pct, enc.sti_actual_pct, enc.sti_amount,
-             enc.lti_eligible_pct, enc.lti_actual_pct, enc.lti_amount,
-             enc.pension_contribution, enc.total_comp, enc.note, id, employeeId]
+             enc.sti_eligible_pct, enc.sti_eligible_amount, enc.sti_actual_pct, enc.sti_amount,
+             enc.lti_eligible_pct, enc.lti_eligible_amount, enc.lti_actual_pct, enc.lti_amount,
+             enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, enc.note, id, employeeId]
         );
     } catch (err: any) {
         return { ok: false, error: err.message };

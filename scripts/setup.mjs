@@ -95,6 +95,30 @@ function ensureIcpdSchema() {
         console.log("Added employee_compensation.updated_at.");
     }
 
+    // compensation_history: client wants an Other Bonus field (parity with
+    // the Compensation & Benefits card, which already has one) and a
+    // dual %/amount entry mode for Pension (the % is display-only —
+    // pension_contribution stays the stored € source of truth). Both are
+    // plain ADD COLUMNs with no default, so they're safe on a non-empty
+    // table in one statement (unlike the updated_at fix above).
+    const compHistCols = db.prepare("PRAGMA table_info(compensation_history)").all().map((c) => c.name);
+    if (!compHistCols.includes("other_bonus")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN other_bonus TEXT");
+        console.log("Added compensation_history.other_bonus.");
+    }
+    if (!compHistCols.includes("pension_pct")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN pension_pct REAL");
+        console.log("Added compensation_history.pension_pct.");
+    }
+    if (!compHistCols.includes("sti_eligible_amount")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN sti_eligible_amount TEXT");
+        console.log("Added compensation_history.sti_eligible_amount.");
+    }
+    if (!compHistCols.includes("lti_eligible_amount")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN lti_eligible_amount TEXT");
+        console.log("Added compensation_history.lti_eligible_amount.");
+    }
+
     // employee_background.type used to be CHECK-constrained to 3 fixed values;
     // the ICPD tab needs 2 more ('strength', 'development_area'). SQLite has
     // no ALTER ... DROP CONSTRAINT, so a still-constrained table is rebuilt

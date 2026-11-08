@@ -15,10 +15,11 @@ export function detectPrecision(value: string | null | undefined): DatePrecision
     return "day";
 }
 
-export function PrecisionDateInput({ value, onChange, disabled }: {
+export function PrecisionDateInput({ value, onChange, disabled, placeholder }: {
     value: string | null | undefined;
     onChange: (value: string) => void;
     disabled?: boolean;
+    placeholder?: string;
 }) {
     // Precision is set ONCE from the starting value and never re-derived
     // from `value` on every keystroke - it used to be computed fresh as
@@ -69,7 +70,7 @@ export function PrecisionDateInput({ value, onChange, disabled }: {
                 <Input
                     type="number"
                     inputMode="numeric"
-                    placeholder="e.g. 2025"
+                    placeholder={placeholder || "e.g. 2025"}
                     disabled={disabled}
                     value={value || ""}
                     onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}

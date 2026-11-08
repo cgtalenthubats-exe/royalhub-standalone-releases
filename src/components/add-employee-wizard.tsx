@@ -12,6 +12,7 @@ import { type EmployeeListItem } from "@/app/actions/employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PrecisionDateInput } from "@/components/precision-date-input";
+import { FunctionSelect } from "@/components/function-select";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -41,8 +42,9 @@ function emptyCareerDraft() { return { banner: "", position: "", location: "", s
 function emptyCompHistDraft(): CompHistoryInput & { key: number } {
     return {
         key: Date.now(), fiscal_year: CURRENT_YEAR - 1, effective_date: null, base_salary: null, cash_allowance: null,
-        sti_eligible_pct: null, sti_actual_pct: null, lti_eligible_pct: null, lti_actual_pct: null,
-        pension_contribution: null, note: null,
+        sti_eligible_pct: null, sti_eligible_amount: null, sti_actual_pct: null, sti_amount: null,
+        lti_eligible_pct: null, lti_eligible_amount: null, lti_actual_pct: null, lti_amount: null,
+        pension_contribution: null, pension_pct: null, other_bonus: null, note: null,
     };
 }
 function backgroundDraft() { return { title: "", organization: "", detail: "" }; }
@@ -55,9 +57,10 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
     const [saving, setSaving] = useState(false);
 
     // Local, mutable copies — quick-add appends to these so a newly created
-    // company/office/position is selectable immediately, without a page reload.
+    // company/office/position/function is selectable immediately, without a page reload.
     const [offices, setOffices] = useState(initialOffices);
     const [positions, setPositions] = useState(initialPositions);
+    const [functionOptions, setFunctionOptions] = useState(functions);
 
     const [personal, setPersonal] = useState({
         name: "", date_of_birth: "", gender: "", nationality: "", job_grade: "",
@@ -149,7 +152,7 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
     }
 
     async function submitNewOffice() {
-        if (!newOffice.banner_name.trim() || !newOffice.country.trim()) { toast.error("Company name and country are required"); return; }
+        if (!newOffice.banner_name.trim()) { toast.error("Company name is required"); return; }
         setAddingOffice(true);
         const res = await createCompanyOffice({ banner_name: newOffice.banner_name, country: newOffice.country, city: newOffice.city });
         setAddingOffice(false);
@@ -158,7 +161,7 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
         setPersonal((p) => ({ ...p, office_id: String(res.office!.office_id) }));
         setShowAddOffice(false);
         setNewOffice({ banner_name: "", country: "", city: "" });
-        toast.success(`${res.office.banner_name} — ${res.office.country} added`);
+        toast.success(res.office.country ? `${res.office.banner_name} — ${res.office.country} added` : `${res.office.banner_name} added`);
     }
 
     async function submitNewPosition() {
@@ -189,7 +192,19 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
     function addCompHistEntry() {
         if (!compHistDraft.fiscal_year) { toast.error("Fiscal year is required"); return; }
         if (compHist.some((c) => c.fiscal_year === compHistDraft.fiscal_year)) { toast.error(`FY${compHistDraft.fiscal_year} already added`); return; }
-        setCompHist((prev) => [...prev, compHistDraft].sort((a, b) => a.fiscal_year - b.fiscal_year));
+        // compensation-history.ts no longer derives sti_amount/lti_amount from
+        // the % server-side (that used to silently round-trip drift) - this
+        // step only has %-entry fields, so the € equivalents are computed
+        // here, once, from the % + base actually entered.
+        const base = compHistDraft.base_salary;
+        const amtOf = (pct: number | null) => (base != null && pct != null ? Math.round((base * pct) / 100) : null);
+        setCompHist((prev) => [...prev, {
+            ...compHistDraft,
+            sti_eligible_amount: amtOf(compHistDraft.sti_eligible_pct),
+            sti_amount: amtOf(compHistDraft.sti_actual_pct),
+            lti_eligible_amount: amtOf(compHistDraft.lti_eligible_pct),
+            lti_amount: amtOf(compHistDraft.lti_actual_pct),
+        }].sort((a, b) => a.fiscal_year - b.fiscal_year));
         setCompHistDraft(emptyCompHistDraft());
         setEffMonth(""); setEffDay("");
     }
@@ -387,7 +402,7 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                         }}
                                     >
                                         <option value="">— select —</option>
-                                        {offices.map((o) => <option key={o.office_id} value={o.office_id}>{o.banner_name} — {o.country}</option>)}
+                                        {offices.map((o) => <option key={o.office_id} value={o.office_id}>{o.country ? `${o.banner_name} — ${o.country}` : o.banner_name}</option>)}
                                     </select>
                                 </div>
                                 <div>
@@ -418,10 +433,13 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                     <div className="sm:col-span-2 space-y-2 rounded-lg border border-dashed p-3">
                                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                             <Input value={newPosition.title} onChange={(e) => setNewPosition({ ...newPosition, title: e.target.value })} placeholder="Position title" />
-                                            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={newPosition.function_id} onChange={(e) => setNewPosition({ ...newPosition, function_id: e.target.value })}>
-                                                <option value="">— function (optional) —</option>
-                                                {functions.map((f) => <option key={f.function_id} value={f.function_id}>{f.name}</option>)}
-                                            </select>
+                                            <FunctionSelect
+                                                label="Function (optional)"
+                                                functions={functionOptions}
+                                                value={newPosition.function_id ? Number(newPosition.function_id) : null}
+                                                onChange={(id) => setNewPosition({ ...newPosition, function_id: id ? String(id) : "" })}
+                                                onCreated={(f) => setFunctionOptions((prev) => [...prev, f])}
+                                            />
                                         </div>
                                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                             <ReqField label="Leadership" value={newPosition.req_leadership} onChange={(v) => setNewPosition({ ...newPosition, req_leadership: v })} />
@@ -459,19 +477,19 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Nationality</label>
-                                    <Combobox options={COUNTRIES} value={personal.nationality || null} onChange={(v) => setPersonal({ ...personal, nationality: v || "" })} placeholder={officeLabel?.country || "Select…"} searchPlaceholder="Search country…" />
+                                    <Combobox options={COUNTRIES} value={personal.nationality || null} onChange={(v) => setPersonal({ ...personal, nationality: v || "" })} placeholder="Select…" searchPlaceholder="Search country…" />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Date of Birth</label>
-                                    <Input type="date" value={personal.date_of_birth} onChange={(e) => setPersonal({ ...personal, date_of_birth: e.target.value })} />
+                                    <PrecisionDateInput value={personal.date_of_birth} onChange={(v) => setPersonal({ ...personal, date_of_birth: v })} />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Hire Date</label>
-                                    <Input type="date" value={personal.hire_date} onChange={(e) => setPersonal({ ...personal, hire_date: e.target.value })} />
+                                    <PrecisionDateInput value={personal.hire_date} onChange={(v) => setPersonal({ ...personal, hire_date: v })} />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Current Job Effective Date</label>
-                                    <Input type="date" value={personal.position_effective_date} onChange={(e) => setPersonal({ ...personal, position_effective_date: e.target.value })} placeholder="defaults to hire date" />
+                                    <PrecisionDateInput value={personal.position_effective_date} onChange={(v) => setPersonal({ ...personal, position_effective_date: v })} placeholder="defaults to hire date" />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Status</label>
@@ -659,7 +677,7 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                 <ReviewRow label="Reports to" value={managerLabel?.name || "— set later on the org chart —"} />
                                 <ReviewRow label="Job Grade" value={personal.job_grade || "—"} />
                                 <ReviewRow label="Gender" value={personal.gender || "—"} />
-                                <ReviewRow label="Nationality" value={personal.nationality || officeLabel?.country || "—"} />
+                                <ReviewRow label="Nationality" value={personal.nationality || "—"} />
                                 <ReviewRow label="Date of Birth" value={personal.date_of_birth || "—"} />
                                 <ReviewRow label="Hire Date" value={personal.hire_date || "—"} />
                                 <ReviewRow label="Status" value={personal.status} />

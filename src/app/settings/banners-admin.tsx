@@ -258,7 +258,6 @@ function OfficeManager({ bannerId, offices }: { bannerId: number; offices: Compa
     }
 
     async function submitAdd() {
-        if (!addDraft.country.trim()) { toast.error("Country is required"); return; }
         setBusyId("new");
         const res = await createBannerOffice(bannerId, addDraft);
         setBusyId(null);

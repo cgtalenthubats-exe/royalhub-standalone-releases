@@ -28,6 +28,64 @@ export async function listFunctions(): Promise<FunctionOption[]> {
     return query<FunctionOption>(`select function_id, name from functions order by name`);
 }
 
+// Settings > Functions admin, plus the inline "+ New" quick-add next to
+// every Function picker (Add Department, Add/Edit Position) - same create
+// form either way, so there's only ever one way to add a function (client
+// feedback: avoid two different add-function flows that could drift apart).
+export async function createFunction(name: string): Promise<{ ok: boolean; function?: FunctionOption; error?: string }> {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, error: "Function name is required" };
+    try {
+        const existing = await queryOne<{ function_id: number; name: string }>(`select function_id, name from functions where name like $1 collate nocase`, [trimmed]);
+        if (existing) return { ok: true, function: existing };
+        const created = await queryOne<{ function_id: number }>(`insert into functions (name) values ($1) returning function_id`, [trimmed]);
+        if (!created) return { ok: false, error: "Could not create function" };
+        revalidateFunctionViews();
+        return { ok: true, function: { function_id: created.function_id, name: trimmed } };
+    } catch (err: any) {
+        return { ok: false, error: err.message };
+    }
+}
+
+export async function updateFunction(functionId: number, name: string): Promise<{ ok: boolean; error?: string }> {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, error: "Function name is required" };
+    try {
+        await query(`update functions set name = $1 where function_id = $2`, [trimmed, functionId]);
+    } catch (err: any) {
+        return { ok: false, error: err.message };
+    }
+    revalidateFunctionViews();
+    return { ok: true };
+}
+
+// Refuses rather than letting the FK constraint fail raw, same pattern as
+// deleteBannerOffice - positions and departments can both reference a
+// function, and either one existing means deleting it would orphan real data.
+export async function deleteFunction(functionId: number): Promise<{ ok: boolean; error?: string }> {
+    const [posCount, deptCount] = await Promise.all([
+        queryOne<{ count: string }>(`select count(*) as count from positions where function_id = $1`, [functionId]),
+        queryOne<{ count: string }>(`select count(*) as count from departments where function_id = $1`, [functionId]),
+    ]);
+    const pos = Number(posCount?.count ?? 0), dept = Number(deptCount?.count ?? 0);
+    if (pos > 0) return { ok: false, error: `${pos} position${pos === 1 ? "" : "s"} still use this function — reassign them first.` };
+    if (dept > 0) return { ok: false, error: `${dept} department${dept === 1 ? "" : "s"} still use this function — reassign them first.` };
+    try {
+        await query(`delete from functions where function_id = $1`, [functionId]);
+    } catch (err: any) {
+        return { ok: false, error: err.message };
+    }
+    revalidateFunctionViews();
+    return { ok: true };
+}
+
+function revalidateFunctionViews() {
+    revalidatePath("/settings");
+    revalidatePath("/positions");
+    revalidatePath("/employees");
+    revalidatePath("/org/function");
+}
+
 export async function listPositions(): Promise<Position[]> {
     const rows = await query<any>(`
         select

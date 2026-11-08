@@ -933,7 +933,7 @@ export async function exportIcpdProfilePptx(input: { employee: EmployeeDetail; i
 
     // ── Slide 1: Current Role ──────────────────────────────────────────────
     const s1 = pptx.addSlide();
-    chrome(s1, "ICPD Profile", e.name, subtitle, "1", photo);
+    chrome(s1, "ICDP Profile", e.name, subtitle, "1", photo);
 
     drawIcpdHeader(s1, leftX, 1.45, leftW, 2.3, e);
     drawPerformanceGradeBox(s1, leftX, 3.85, leftW, 0.85, e.performance);
@@ -1021,7 +1021,7 @@ export async function exportIcpdProfilePptx(input: { employee: EmployeeDetail; i
 
     // ── Slide 2: Career Planning & Succession ───────────────────────────────
     const s2 = pptx.addSlide();
-    chrome(s2, "ICPD Profile", e.name, subtitle, "2", photo);
+    chrome(s2, "ICDP Profile", e.name, subtitle, "2", photo);
 
     drawIcpdHeader(s2, leftX, 1.45, leftW, 2.3, e);
     drawPerformanceGradeBox(s2, leftX, 3.85, leftW, 0.85, e.performance);
@@ -1105,7 +1105,7 @@ export async function exportIcpdProfilePptx(input: { employee: EmployeeDetail; i
         s2.addText("No preparation plan recorded yet", { x: nr.innerX, y: nr.innerY, w: nr.innerW, h: 0.3, fontSize: 9, italic: true, color: GREY });
     }
 
-    await pptx.writeFile({ fileName: `icpd-profile-${e.name.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.pptx` });
+    await pptx.writeFile({ fileName: `icdp-profile-${e.name.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.pptx` });
 }
 
 // dashedBorder marks a box as a Head of Function relationship rather than the

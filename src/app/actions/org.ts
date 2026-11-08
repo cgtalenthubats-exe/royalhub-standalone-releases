@@ -532,7 +532,6 @@ export async function createCompanyOffice(input: { banner_name: string; country:
     const name = input.banner_name.trim();
     const country = input.country.trim();
     if (!name) return { ok: false, error: "Company name is required" };
-    if (!country) return { ok: false, error: "Country is required" };
 
     try {
         let bannerId: number;
@@ -545,11 +544,18 @@ export async function createCompanyOffice(input: { banner_name: string; country:
             bannerId = created.banner_id;
         }
 
-        const existingOffice = await queryOne<any>(
-            `select office_id, banner_id, country, city from banner_offices where banner_id = $1 and country like $2 collate nocase`,
-            [bannerId, country]
-        );
-        if (existingOffice) return { ok: true, office: { ...existingOffice, banner_name: name } };
+        // An office with no country given yet is still created (country left
+        // "") rather than blocked - the dedup lookup below only applies once
+        // there's a real country to match on, so a second blank-country quick
+        // add for the same company always creates a new office rather than
+        // silently reusing an unrelated one.
+        if (country) {
+            const existingOffice = await queryOne<any>(
+                `select office_id, banner_id, country, city from banner_offices where banner_id = $1 and country like $2 collate nocase`,
+                [bannerId, country]
+            );
+            if (existingOffice) return { ok: true, office: { ...existingOffice, banner_name: name } };
+        }
 
         const office = await queryOne<any>(
             `insert into banner_offices (banner_id, country, city, is_hq, is_regional_office)
@@ -572,7 +578,6 @@ export interface OfficeInput { country: string; city: string | null; is_hq: bool
 export async function createBannerOffice(bannerId: number, input: OfficeInput): Promise<{ ok: boolean; error?: string }> {
     await requireSuper();
     const country = input.country.trim();
-    if (!country) return { ok: false, error: "Country is required" };
     try {
         await query(
             `insert into banner_offices (banner_id, country, city, is_hq, is_regional_office) values ($1,$2,$3,$4,$5)`,
@@ -588,7 +593,6 @@ export async function createBannerOffice(bannerId: number, input: OfficeInput): 
 export async function updateBannerOffice(officeId: number, input: OfficeInput): Promise<{ ok: boolean; error?: string }> {
     await requireSuper();
     const country = input.country.trim();
-    if (!country) return { ok: false, error: "Country is required" };
     try {
         await query(
             `update banner_offices set country = $1, city = $2, is_hq = $3, is_regional_office = $4 where office_id = $5`,

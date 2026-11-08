@@ -191,12 +191,16 @@ CREATE TABLE compensation_history (
   adjustment_amount REAL,
   cash_allowance    REAL,
   sti_eligible_pct  TEXT,  -- encrypted
+  sti_eligible_amount TEXT, -- encrypted; display-only, not counted in total_comp (not yet paid)
   sti_actual_pct    TEXT,  -- encrypted
   sti_amount        TEXT,  -- encrypted
   lti_eligible_pct  TEXT,  -- encrypted
+  lti_eligible_amount TEXT, -- encrypted; display-only, not counted in total_comp (not yet paid)
   lti_actual_pct    TEXT,  -- encrypted
   lti_amount        TEXT,  -- encrypted
   pension_contribution REAL,
+  pension_pct       REAL,  -- display-only; pension_contribution (€) is the stored source of truth
+  other_bonus       TEXT,  -- encrypted
   note              TEXT,
   UNIQUE (employee_id, fiscal_year)
 );
