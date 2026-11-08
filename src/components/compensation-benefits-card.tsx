@@ -21,15 +21,14 @@ const OTHER_BENEFIT_LABEL = "Other benefit (please specify)";
 // {pct, amount, mode} triple in the draft instead of one plain number.
 type DualKey = "sti_target" | "sti_max" | "lti_target" | "lti_max";
 const DUAL_KEYS: DualKey[] = ["sti_target", "sti_max", "lti_target", "lti_max"];
-const DUAL_LABELS: Record<DualKey, string> = { sti_target: "STI Target", sti_max: "STI Max", lti_target: "LTI Target", lti_max: "LTI Max" };
 
-const MONEY_FIELDS = [
-    { key: "other_bonus", label: "Other Bonus" },
+const ALLOWANCE_FIELDS = [
     { key: "allowance_company_car", label: "Allowance · Company Car" },
     { key: "allowance_mobility", label: "Allowance · Mobile" },
     { key: "allowance_home_office", label: "Allowance · Housing" },
     { key: "allowance_private_medical", label: "Benefit · Medical" },
 ] as const;
+const MONEY_FIELDS = [{ key: "other_bonus", label: "Other Bonus" }, ...ALLOWANCE_FIELDS] as const;
 type MoneyKey = (typeof MONEY_FIELDS)[number]["key"];
 // allowance_family_cover is free text ("Other benefit — please specify", not a
 // € amount — see migration 023), so it's kept out of the numeric fields and
@@ -168,33 +167,59 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="max-h-[85vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Edit Compensation &amp; Benefits</DialogTitle></DialogHeader>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">Base / Salary (€)</label>
-                            <CommaNumberInput value={draft.base_salary} onChange={(v) => setDraft({ ...draft, base_salary: v })} />
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">Base / Salary (€)</label>
+                                <CommaNumberInput value={draft.base_salary} onChange={(v) => setDraft({ ...draft, base_salary: v })} />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">Other Bonus (€)</label>
+                                <CommaNumberInput value={draft.other_bonus} onChange={(v) => setDraft({ ...draft, other_bonus: v })} />
+                            </div>
                         </div>
-                        {DUAL_KEYS.map((k) => (
-                            <div key={k}>
-                                <label className="mb-1 block text-xs font-medium text-slate-600">{DUAL_LABELS[k]}</label>
-                                <DualModeMoneyInput
-                                    mode={draft[k].mode}
-                                    onModeChange={(m) => setDualMode(k, m)}
-                                    pct={draft[k].pct}
-                                    amount={draft[k].amount}
-                                    base={draftBase}
-                                    onChange={(next) => setDual(k, next)}
-                                />
+
+                        {/* STI Target and Max grouped together — they're the same thing, just shown apart before */}
+                        <div className="rounded-lg border border-slate-200 p-3">
+                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">STI / Short-term incentive</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="mb-1 block text-[11px] text-slate-500">Target</label>
+                                    <DualModeMoneyInput mode={draft.sti_target.mode} onModeChange={(m) => setDualMode("sti_target", m)} pct={draft.sti_target.pct} amount={draft.sti_target.amount} base={draftBase} onChange={(next) => setDual("sti_target", next)} />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-[11px] text-slate-500">Max</label>
+                                    <DualModeMoneyInput mode={draft.sti_max.mode} onModeChange={(m) => setDualMode("sti_max", m)} pct={draft.sti_max.pct} amount={draft.sti_max.amount} base={draftBase} onChange={(next) => setDual("sti_max", next)} />
+                                </div>
                             </div>
-                        ))}
-                        {MONEY_FIELDS.map((f) => (
-                            <div key={f.key}>
-                                <label className="mb-1 block text-xs font-medium text-slate-600">{f.label} (€)</label>
-                                <CommaNumberInput value={draft[f.key]} onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
+                        </div>
+
+                        {/* LTI Target and Max grouped together */}
+                        <div className="rounded-lg border border-slate-200 p-3">
+                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">LTI / Long-term incentive</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="mb-1 block text-[11px] text-slate-500">Target</label>
+                                    <DualModeMoneyInput mode={draft.lti_target.mode} onModeChange={(m) => setDualMode("lti_target", m)} pct={draft.lti_target.pct} amount={draft.lti_target.amount} base={draftBase} onChange={(next) => setDual("lti_target", next)} />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-[11px] text-slate-500">Max</label>
+                                    <DualModeMoneyInput mode={draft.lti_max.mode} onModeChange={(m) => setDualMode("lti_max", m)} pct={draft.lti_max.pct} amount={draft.lti_max.amount} base={draftBase} onChange={(next) => setDual("lti_max", next)} />
+                                </div>
                             </div>
-                        ))}
-                        <div className="sm:col-span-2">
-                            <label className="mb-1 block text-xs font-medium text-slate-600">{OTHER_BENEFIT_LABEL}</label>
-                            <Input value={otherBenefit} onChange={(e) => setOtherBenefit(e.target.value)} placeholder="e.g. gym membership, transport pass…" />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {ALLOWANCE_FIELDS.map((f) => (
+                                <div key={f.key}>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">{f.label} (€)</label>
+                                    <CommaNumberInput value={draft[f.key]} onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
+                                </div>
+                            ))}
+                            <div className="sm:col-span-2">
+                                <label className="mb-1 block text-xs font-medium text-slate-600">{OTHER_BENEFIT_LABEL}</label>
+                                <Input value={otherBenefit} onChange={(e) => setOtherBenefit(e.target.value)} placeholder="e.g. gym membership, transport pass…" />
+                            </div>
                         </div>
                     </div>
                     <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
