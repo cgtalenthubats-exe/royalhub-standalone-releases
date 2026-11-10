@@ -8,7 +8,8 @@ import { decryptEmployeeCompensation, decryptCompensationHistory } from "@/lib/c
 
 export interface Compensation {
     employee_id: number;
-    currency: string;
+    currency: string;        // the currency this record was entered in (source currency)
+    fx_rate_used: number | null; // rate_to_eur frozen at save time; null when currency is EUR
     base_salary: number | null;
     sti_target: number | null;
     sti_max: number | null;

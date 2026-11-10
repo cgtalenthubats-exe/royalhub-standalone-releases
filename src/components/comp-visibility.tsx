@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import { formatCurrency } from "@/lib/format";
+import { useCurrencyDisplay } from "@/components/currency-display";
 import type { CompVisibility } from "@/lib/auth/types";
 
 // The viewer's effective compensation visibility, provided once at the root.
@@ -21,13 +22,19 @@ export function useCompVisibility() {
 //  visible → the real (formatted) amount
 //  blurred → a blurred masked amount (no real value underneath)
 //  hidden  → a small "restricted" mark
-export function Money({ value, className, currency }: { value: number | null | undefined; className?: string; currency?: string }) {
+// `value` is always the stored EUR-equivalent amount, whatever currency the
+// record was actually entered in (see currency-display.tsx) - this converts
+// it live to whatever the viewer has picked to look at right now. A `currency`
+// override is no longer accepted: display currency is a single global
+// preference, not a per-record thing.
+export function Money({ value, className }: { value: number | null | undefined; className?: string }) {
     const vis = useContext(Ctx);
-    if (vis === "visible") return <span className={className}>{formatCurrency(value, currency)}</span>;
+    const { displayCurrency, convert } = useCurrencyDisplay();
+    if (vis === "visible") return <span className={className}>{formatCurrency(value == null ? value : convert(value), displayCurrency)}</span>;
     if (vis === "blurred") {
         return (
             <span className={className} title="Compensation hidden" aria-label="Compensation hidden">
-                <span className="select-none blur-[3px]" aria-hidden>€000,000</span>
+                <span className="select-none blur-[3px]" aria-hidden>{formatCurrency(0, displayCurrency).replace("0", "000,000")}</span>
             </span>
         );
     }

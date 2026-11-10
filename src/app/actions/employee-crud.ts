@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireCompEditor, canSeePersonal } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { encryptAmount } from "@/lib/crypto";
+import { getCurrentRate } from "@/app/actions/currency";
 
 export interface NewEmployeeInput {
     name: string;
@@ -576,18 +577,48 @@ function totalCompensationOf(c: { base_salary?: number | null; sti_target?: numb
         + (c.allowance_company_car ?? 0) + (c.allowance_mobility ?? 0) + (c.allowance_home_office ?? 0) + (c.allowance_private_medical ?? 0);
 }
 
+const COMP_AMOUNT_KEYS = [
+    "base_salary", "sti_target", "sti_max", "lti_target", "lti_max", "other_bonus",
+    "allowance_company_car", "allowance_mobility", "allowance_home_office", "allowance_private_medical",
+] as const;
+
+// This card can be entered in GBP/CHF/DKK, not just EUR - every numeric
+// column always stores the EUR-equivalent (so totals, comparisons and every
+// existing formula keep working untouched); this multiplies every amount
+// field by today's rate ONCE, server-side, rather than trusting whatever
+// conversion the client might have done. The rate used is frozen onto the
+// row (fx_rate_used) so re-opening this record later shows back the exact
+// figures that were typed, not a value that's drifted with today's rate.
+type CompAmountFields = Record<(typeof COMP_AMOUNT_KEYS)[number], number | null | undefined>;
+async function convertCompToEur<T extends Partial<CompAmountFields>>(input: T, currency: string): Promise<{ converted: T; fxRateUsed: number | null; error?: string }> {
+    if (currency === "EUR") return { converted: input, fxRateUsed: null };
+    const rate = await getCurrentRate(currency);
+    if (!rate) return { converted: input, fxRateUsed: null, error: `No exchange rate set for ${currency} — add one in Settings > Currency first.` };
+    const converted = { ...input };
+    for (const key of COMP_AMOUNT_KEYS) {
+        if (key in converted && converted[key as keyof T] != null) {
+            (converted as any)[key] = Math.round((converted[key as keyof T] as number) * rate);
+        }
+    }
+    return { converted, fxRateUsed: rate };
+}
+
 export async function updateEmployeeCompensation(employeeId: number, input: CompensationInput): Promise<{ ok: boolean; error?: string }> {
     try { await requireCompEditor(); } catch (e: any) { return { ok: false, error: e.message }; }
-    const total_compensation = totalCompensationOf(input);
+    const currency = input.currency || "EUR";
+    const { converted, fxRateUsed, error } = await convertCompToEur(input, currency);
+    if (error) return { ok: false, error };
+    const total_compensation = totalCompensationOf(converted);
     try {
         await query(
             `insert into employee_compensation
-                (employee_id, currency, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
+                (employee_id, currency, fx_rate_used, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
                  allowance_company_car, allowance_mobility, allowance_home_office, allowance_private_medical,
                  allowance_family_cover, total_compensation, updated_at)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, CURRENT_TIMESTAMP)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, CURRENT_TIMESTAMP)
              on conflict (employee_id) do update set
                 currency = excluded.currency,
+                fx_rate_used = excluded.fx_rate_used,
                 base_salary = excluded.base_salary,
                 sti_target = excluded.sti_target,
                 sti_max = excluded.sti_max,
@@ -601,9 +632,9 @@ export async function updateEmployeeCompensation(employeeId: number, input: Comp
                 allowance_family_cover = excluded.allowance_family_cover,
                 total_compensation = excluded.total_compensation,
                 updated_at = excluded.updated_at`,
-            [employeeId, input.currency || "EUR", encryptAmount(input.base_salary), encryptAmount(input.sti_target), encryptAmount(input.sti_max), encryptAmount(input.lti_target), encryptAmount(input.lti_max),
-             encryptAmount(input.other_bonus), input.allowance_company_car, input.allowance_mobility, input.allowance_home_office,
-             input.allowance_private_medical, input.allowance_family_cover, encryptAmount(total_compensation)]
+            [employeeId, currency, fxRateUsed, encryptAmount(converted.base_salary), encryptAmount(converted.sti_target), encryptAmount(converted.sti_max), encryptAmount(converted.lti_target), encryptAmount(converted.lti_max),
+             encryptAmount(converted.other_bonus), converted.allowance_company_car, converted.allowance_mobility, converted.allowance_home_office,
+             converted.allowance_private_medical, converted.allowance_family_cover, encryptAmount(total_compensation)]
         );
     } catch (err: any) {
         return { ok: false, error: err.message };

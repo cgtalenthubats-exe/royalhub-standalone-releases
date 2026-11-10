@@ -5,8 +5,11 @@ import { Toaster } from "sonner";
 import { Sidebar } from "@/components/sidebar";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { listBanners } from "@/app/actions/org";
+import { listCurrencyRates } from "@/app/actions/currency";
 import { effectiveCompVisibility } from "@/lib/permissions";
 import { CompVisibilityProvider } from "@/components/comp-visibility";
+import { CurrencyDisplayProvider } from "@/components/currency-display";
+import { CurrencySwitcher } from "@/components/currency-switcher";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -25,18 +28,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // Standalone edition: no login — this is always the fixed local operator.
     const user = await getCurrentUser();
     const banners = user ? await listBanners() : [];
+    const currencyRates = user ? await listCurrencyRates() : [];
+    const rateMap = Object.fromEntries(currencyRates.map((r) => [r.currency_code, r.rate_to_eur]));
     return (
         <html lang="en" className={jakarta.variable}>
             <body className="min-h-dvh lg:h-screen lg:overflow-hidden bg-[#f1f5f9] font-sans antialiased">
                 <UnsavedChangesProvider>
-                    <div className="flex min-h-dvh lg:h-full flex-col lg:flex-row">
-                        {user && <Sidebar user={user} banners={banners} />}
-                        <main className="flex-1 min-h-0 lg:overflow-y-auto">
-                            <CompVisibilityProvider value={effectiveCompVisibility(user)}>
-                                {children}
-                            </CompVisibilityProvider>
-                        </main>
-                    </div>
+                    <CurrencyDisplayProvider rates={rateMap}>
+                        <div className="flex min-h-dvh lg:h-full flex-col lg:flex-row">
+                            {user && <Sidebar user={user} banners={banners} />}
+                            <main className="flex-1 min-h-0 lg:overflow-y-auto">
+                                <CompVisibilityProvider value={effectiveCompVisibility(user)}>
+                                    {children}
+                                </CompVisibilityProvider>
+                            </main>
+                        </div>
+                        {user && <CurrencySwitcher />}
+                    </CurrencyDisplayProvider>
                 </UnsavedChangesProvider>
                 <Toaster position="top-right" richColors />
             </body>

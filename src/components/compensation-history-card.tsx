@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
+import { useCurrencyDisplay } from "@/components/currency-display";
 
 const n = (v: unknown): number | null => (v == null || v === "" ? null : Number(v));
 
@@ -26,6 +27,7 @@ type Draft = {
     id?: number;
     fiscal_year: number | "";
     effective_date: string;
+    currency: string;
     base_salary: number | "";
     cash_allowance: number | "";
     other_bonus: number | "";
@@ -37,26 +39,37 @@ function emptyDualField(): DualFieldDraft { return { pct: "", amount: "", mode: 
 function emptyDraft(): Draft {
     return {
         fiscal_year: new Date().getFullYear() - 1,
-        effective_date: "", base_salary: "", cash_allowance: "", other_bonus: "", note: "",
+        effective_date: "", currency: "EUR", base_salary: "", cash_allowance: "", other_bonus: "", note: "",
         sti_eligible: emptyDualField(), sti_actual: emptyDualField(), lti_eligible: emptyDualField(), lti_actual: emptyDualField(),
         pension: { pct: "", amount: "", mode: "amount" },
     };
 }
 
+// A saved row's own amount columns are always the EUR-equivalent, regardless
+// of what currency it was entered in - re-opening it for edit converts those
+// back to the ORIGINAL local-currency figures using the rate frozen on the
+// row at save time (fx_rate_used), not today's rate, so the dialog shows
+// back exactly what was typed, never a value that's drifted since.
 function toDraft(h: CompensationHistoryEntry): Draft {
+    const rate = h.currency !== "EUR" && h.fx_rate_used ? h.fx_rate_used : null;
+    const back = (v: number | null): number | "" => {
+        if (v == null) return "";
+        return rate ? Math.round((v / rate) * 100) / 100 : v;
+    };
     return {
         id: h.id,
         fiscal_year: n(h.fiscal_year) ?? "",
         effective_date: h.effective_date || "",
-        base_salary: n(h.base_salary) ?? "",
-        cash_allowance: n(h.cash_allowance) ?? "",
-        other_bonus: n(h.other_bonus) ?? "",
+        currency: h.currency || "EUR",
+        base_salary: back(n(h.base_salary)),
+        cash_allowance: back(n(h.cash_allowance)),
+        other_bonus: back(n(h.other_bonus)),
         note: h.note || "",
-        sti_eligible: { pct: n(h.sti_eligible_pct) ?? "", amount: n(h.sti_eligible_amount) ?? "", mode: "pct" },
-        sti_actual: { pct: n(h.sti_actual_pct) ?? "", amount: n(h.sti_amount) ?? "", mode: "pct" },
-        lti_eligible: { pct: n(h.lti_eligible_pct) ?? "", amount: n(h.lti_eligible_amount) ?? "", mode: "pct" },
-        lti_actual: { pct: n(h.lti_actual_pct) ?? "", amount: n(h.lti_amount) ?? "", mode: "pct" },
-        pension: { pct: n(h.pension_pct) ?? "", amount: n(h.pension_contribution) ?? "", mode: "amount" },
+        sti_eligible: { pct: n(h.sti_eligible_pct) ?? "", amount: back(n(h.sti_eligible_amount)), mode: "pct" },
+        sti_actual: { pct: n(h.sti_actual_pct) ?? "", amount: back(n(h.sti_amount)), mode: "pct" },
+        lti_eligible: { pct: n(h.lti_eligible_pct) ?? "", amount: back(n(h.lti_eligible_amount)), mode: "pct" },
+        lti_actual: { pct: n(h.lti_actual_pct) ?? "", amount: back(n(h.lti_amount)), mode: "pct" },
+        pension: { pct: n(h.pension_pct) ?? "", amount: back(n(h.pension_contribution)), mode: "amount" },
     };
 }
 
@@ -80,12 +93,28 @@ function prorationFraction(fiscalYear: number, effectiveDate: string | null): nu
 
 export function CompensationHistoryCard({ employeeId, history, canEdit = true }: { employeeId: number; history: CompensationHistoryEntry[]; canEdit?: boolean }) {
     const router = useRouter();
+    const { rates, convert, displayCurrency } = useCurrencyDisplay();
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [saving, setSaving] = useState(false);
 
     function openAdd() { setDraft(emptyDraft()); setOpen(true); }
     function openEdit(h: CompensationHistoryEntry) { setDraft(toDraft(h)); setOpen(true); }
+
+    // Switching "Entered in" mid-edit must re-express every figure already in
+    // the form in the new currency's magnitude, not just relabel it - see the
+    // identical note in compensation-benefits-card.tsx.
+    function changeCurrency(nextCurrency: string) {
+        const rateOf = (code: string) => (code === "EUR" ? 1 : rates[code] ?? 1);
+        setDraft((prev) => {
+            if (!prev) return prev;
+            const factor = rateOf(prev.currency) / rateOf(nextCurrency);
+            const conv = (v: number | ""): number | "" => (v === "" ? "" : Math.round(Number(v) * factor * 100) / 100);
+            const next: Draft = { ...prev, currency: nextCurrency, base_salary: conv(prev.base_salary), cash_allowance: conv(prev.cash_allowance), other_bonus: conv(prev.other_bonus) };
+            DUAL_KEYS.forEach((k) => { next[k] = { ...prev[k], amount: conv(prev[k].amount) }; });
+            return next;
+        });
+    }
 
     function setDual(key: DualKey, next: { pct: number | ""; amount: number | "" }) {
         setDraft((prev) => prev && ({ ...prev, [key]: { ...prev[key], ...next } }));
@@ -102,6 +131,7 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
         const payload: CompHistoryInput = {
             fiscal_year: Number(draft.fiscal_year),
             effective_date: draft.effective_date || null,
+            currency: draft.currency,
             base_salary: num(draft.base_salary),
             cash_allowance: num(draft.cash_allowance),
             other_bonus: num(draft.other_bonus),
@@ -134,19 +164,24 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
 
     const sorted = [...history].sort((a, b) => (n(b.fiscal_year) ?? 0) - (n(a.fiscal_year) ?? 0));
 
-    // live-computed figures for the dialog — mirrors toRow()'s formula
-    // (base + STI actual + LTI actual + cash allowance + pension + other
-    // bonus, then prorated by effective date), everything already resolved
-    // to € by the DualModeMoneyInput pairs above.
+    // live-computed figures for the dialog — mirrors toRow()'s formula (base
+    // + STI actual + LTI actual + cash allowance + pension + other bonus,
+    // then prorated by effective date). Everything here is in draft.currency
+    // units (whatever the picker below is set to), not necessarily EUR — the
+    // server converts to EUR once, on save (see compensation-history.ts).
     const dBase = draft && draft.base_salary !== "" ? Number(draft.base_salary) : null;
-    const dStiEur = draft && draft.sti_actual.amount !== "" ? Number(draft.sti_actual.amount) : null;
-    const dLtiEur = draft && draft.lti_actual.amount !== "" ? Number(draft.lti_actual.amount) : null;
-    const dPensionEur = draft && draft.pension.amount !== "" ? Number(draft.pension.amount) : null;
-    const dFullYearTotal = (dBase ?? 0) + (dStiEur ?? 0) + (dLtiEur ?? 0)
+    const dStiAmt = draft && draft.sti_actual.amount !== "" ? Number(draft.sti_actual.amount) : null;
+    const dLtiAmt = draft && draft.lti_actual.amount !== "" ? Number(draft.lti_actual.amount) : null;
+    const dPensionAmt = draft && draft.pension.amount !== "" ? Number(draft.pension.amount) : null;
+    const dFullYearTotal = (dBase ?? 0) + (dStiAmt ?? 0) + (dLtiAmt ?? 0)
         + (draft && draft.cash_allowance !== "" ? Number(draft.cash_allowance) : 0)
-        + (dPensionEur ?? 0)
+        + (dPensionAmt ?? 0)
         + (draft && draft.other_bonus !== "" ? Number(draft.other_bonus) : 0);
     const dFraction = draft && draft.fiscal_year !== "" ? prorationFraction(Number(draft.fiscal_year), draft.effective_date || null) : 1;
+    // Today's rate, for a live "≈ €X" hint only — the actual conversion that
+    // gets stored uses whatever rate is current at the moment Save is
+    // clicked (see getCurrentRate in employee-crud.ts/compensation-history.ts).
+    const draftRate = draft && draft.currency !== "EUR" ? rates[draft.currency] : 1;
     const dTotal = dFraction < 1 ? Math.round(dFullYearTotal * dFraction) : dFullYearTotal;
 
     return (
@@ -176,22 +211,27 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {sorted.map((h) => (
+                        {sorted.map((h) => {
+                            const cv = (v: number | null) => (v == null ? null : convert(v));
+                            return (
                             <tr key={h.id} className="hover:bg-slate-50/60">
-                                <td className="px-3 py-2 font-semibold text-[#0f172a]">{h.fiscal_year}A</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{formatCurrency(n(h.base_salary))}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(n(h.cash_allowance))}</td>
+                                <td className="px-3 py-2 font-semibold text-[#0f172a]">
+                                    {h.fiscal_year}A
+                                    {h.currency !== "EUR" && <div className="text-[9px] font-normal text-slate-400">entered in {h.currency}</div>}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{formatCurrency(cv(n(h.base_salary)), displayCurrency)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(cv(n(h.cash_allowance)), displayCurrency)}</td>
                                 <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                                    {formatCurrency(n(h.sti_amount))}
+                                    {formatCurrency(cv(n(h.sti_amount)), displayCurrency)}
                                     <div className="text-[9.5px] text-slate-400">{pctPair(n(h.sti_actual_pct), n(h.sti_eligible_pct))}</div>
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                                    {formatCurrency(n(h.lti_amount))}
+                                    {formatCurrency(cv(n(h.lti_amount)), displayCurrency)}
                                     <div className="text-[9.5px] text-slate-400">{pctPair(n(h.lti_actual_pct), n(h.lti_eligible_pct))}</div>
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(n(h.pension_contribution))}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(n(h.other_bonus))}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-bold text-[#0b1f3a]">{formatCurrency(n(h.total_comp))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(cv(n(h.pension_contribution)), displayCurrency)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(cv(n(h.other_bonus)), displayCurrency)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-bold text-[#0b1f3a]">{formatCurrency(cv(n(h.total_comp)), displayCurrency)}</td>
                                 <td className="px-3 py-2">
                                     {canEdit && (
                                         <div className="flex items-center justify-end gap-1">
@@ -201,7 +241,8 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                                     )}
                                 </td>
                             </tr>
-                        ))}
+                            );
+                        })}
                         {sorted.length === 0 && (
                             <tr><td colSpan={9} className="px-3.5 py-4 text-[12px] text-slate-400">No compensation history yet — click “Add year” to record base, STI/LTI and pension for a fiscal year.</td></tr>
                         )}
@@ -224,13 +265,32 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                                     <Input type="date" value={draft.effective_date} onChange={(e) => setDraft({ ...draft, effective_date: e.target.value })} />
                                 </div>
                             </div>
+
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">Entered in</label>
+                                <select
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                    value={draft.currency}
+                                    onChange={(e) => changeCurrency(e.target.value)}
+                                >
+                                    {Object.keys(rates).sort((a, b) => (a === "EUR" ? -1 : b === "EUR" ? 1 : a.localeCompare(b))).map((code) => (
+                                        <option key={code} value={code}>{code}</option>
+                                    ))}
+                                </select>
+                                {draft.currency !== "EUR" && (
+                                    <p className="mt-1 text-[10.5px] text-slate-400">
+                                        Every amount below is in {draft.currency}. {draftRate ? `Saved as the EUR equivalent at today's rate (1 ${draft.currency} = ${Math.round(draftRate * 10000) / 10000} EUR).` : `No rate set for ${draft.currency} yet — add one in Settings > Currency before saving.`}
+                                    </p>
+                                )}
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">Base Salary (€)</label>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Base Salary ({draft.currency})</label>
                                     <CommaNumberInput value={draft.base_salary} onChange={(v) => setDraft({ ...draft, base_salary: v })} />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">Cash Allowance (€)</label>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Cash Allowance ({draft.currency})</label>
                                     <CommaNumberInput value={draft.cash_allowance} onChange={(v) => setDraft({ ...draft, cash_allowance: v })} />
                                 </div>
                             </div>
@@ -239,16 +299,16 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                             <div className="rounded-lg border border-slate-200 p-3">
                                 <div className="mb-2 flex items-center justify-between">
                                     <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">STI / Short-term incentive</span>
-                                    <span className="text-[12px] font-bold tabular-nums text-[#0b1f3a]">{draft.sti_actual.amount === "" ? "—" : formatCurrency(Number(draft.sti_actual.amount))}</span>
+                                    <span className="text-[12px] font-bold tabular-nums text-[#0b1f3a]">{draft.sti_actual.amount === "" ? "—" : formatCurrency(Number(draft.sti_actual.amount), draft.currency)}</span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="mb-1 block text-[11px] text-slate-500">Eligible (target)</label>
-                                        <DualModeMoneyInput mode={draft.sti_eligible.mode} onModeChange={(m) => setDualMode("sti_eligible", m)} pct={draft.sti_eligible.pct} amount={draft.sti_eligible.amount} base={dBase} onChange={(next) => setDual("sti_eligible", next)} />
+                                        <DualModeMoneyInput mode={draft.sti_eligible.mode} onModeChange={(m) => setDualMode("sti_eligible", m)} pct={draft.sti_eligible.pct} amount={draft.sti_eligible.amount} base={dBase} onChange={(next) => setDual("sti_eligible", next)} currencyLabel={draft.currency} />
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-[11px] text-slate-500">Actual (paid)</label>
-                                        <DualModeMoneyInput mode={draft.sti_actual.mode} onModeChange={(m) => setDualMode("sti_actual", m)} pct={draft.sti_actual.pct} amount={draft.sti_actual.amount} base={dBase} onChange={(next) => setDual("sti_actual", next)} />
+                                        <DualModeMoneyInput mode={draft.sti_actual.mode} onModeChange={(m) => setDualMode("sti_actual", m)} pct={draft.sti_actual.pct} amount={draft.sti_actual.amount} base={dBase} onChange={(next) => setDual("sti_actual", next)} currencyLabel={draft.currency} />
                                     </div>
                                 </div>
                             </div>
@@ -257,16 +317,16 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                             <div className="rounded-lg border border-slate-200 p-3">
                                 <div className="mb-2 flex items-center justify-between">
                                     <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">LTI / Long-term incentive</span>
-                                    <span className="text-[12px] font-bold tabular-nums text-[#0b1f3a]">{draft.lti_actual.amount === "" ? "—" : formatCurrency(Number(draft.lti_actual.amount))}</span>
+                                    <span className="text-[12px] font-bold tabular-nums text-[#0b1f3a]">{draft.lti_actual.amount === "" ? "—" : formatCurrency(Number(draft.lti_actual.amount), draft.currency)}</span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="mb-1 block text-[11px] text-slate-500">Eligible (target)</label>
-                                        <DualModeMoneyInput mode={draft.lti_eligible.mode} onModeChange={(m) => setDualMode("lti_eligible", m)} pct={draft.lti_eligible.pct} amount={draft.lti_eligible.amount} base={dBase} onChange={(next) => setDual("lti_eligible", next)} />
+                                        <DualModeMoneyInput mode={draft.lti_eligible.mode} onModeChange={(m) => setDualMode("lti_eligible", m)} pct={draft.lti_eligible.pct} amount={draft.lti_eligible.amount} base={dBase} onChange={(next) => setDual("lti_eligible", next)} currencyLabel={draft.currency} />
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-[11px] text-slate-500">Actual (paid)</label>
-                                        <DualModeMoneyInput mode={draft.lti_actual.mode} onModeChange={(m) => setDualMode("lti_actual", m)} pct={draft.lti_actual.pct} amount={draft.lti_actual.amount} base={dBase} onChange={(next) => setDual("lti_actual", next)} />
+                                        <DualModeMoneyInput mode={draft.lti_actual.mode} onModeChange={(m) => setDualMode("lti_actual", m)} pct={draft.lti_actual.pct} amount={draft.lti_actual.amount} base={dBase} onChange={(next) => setDual("lti_actual", next)} currencyLabel={draft.currency} />
                                     </div>
                                 </div>
                             </div>
@@ -274,10 +334,10 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Pension Contribution</label>
-                                    <DualModeMoneyInput mode={draft.pension.mode} onModeChange={(m) => setDualMode("pension", m)} pct={draft.pension.pct} amount={draft.pension.amount} base={dBase} onChange={(next) => setDual("pension", next)} />
+                                    <DualModeMoneyInput mode={draft.pension.mode} onModeChange={(m) => setDualMode("pension", m)} pct={draft.pension.pct} amount={draft.pension.amount} base={dBase} onChange={(next) => setDual("pension", next)} currencyLabel={draft.currency} />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">Other Bonus (€)</label>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Other Bonus ({draft.currency})</label>
                                     <CommaNumberInput value={draft.other_bonus} onChange={(v) => setDraft({ ...draft, other_bonus: v })} />
                                 </div>
                             </div>
@@ -290,7 +350,12 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                                 <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                     Total Comp (base + STI + LTI + cash allow. + pension + other bonus){dFraction < 1 && ` · prorated ${Math.round(dFraction * 100)}%`}
                                 </span>
-                                <span className="text-[15px] font-extrabold tabular-nums text-[#0b1f3a]">{formatCurrency(dTotal)}</span>
+                                <div className="text-right">
+                                    <span className="text-[15px] font-extrabold tabular-nums text-[#0b1f3a]">{formatCurrency(dTotal, draft.currency)}</span>
+                                    {draft.currency !== "EUR" && draftRate ? (
+                                        <div className="text-[10.5px] text-slate-400">≈ {formatCurrency(Math.round(dTotal * draftRate), "EUR")} at today's rate</div>
+                                    ) : null}
+                                </div>
                             </div>
                         </div>
                     )}

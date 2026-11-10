@@ -406,13 +406,20 @@ export async function commitProfileImport(rows: CommitProfileEmployee[], merges:
                     const ltiTarget = r.base_salary != null && r.lti_target_pct != null ? Math.round((r.base_salary * r.lti_target_pct) / 100) : null;
                     const total = (r.base_salary ?? 0) + (stiTarget ?? 0) + (ltiTarget ?? 0) + (r.other_bonus ?? 0)
                         + (r.allowance_car ?? 0) + (r.allowance_mobility ?? 0) + (r.allowance_home_office ?? 0) + (r.allowance_private_medical ?? 0);
+                    // currency is always EUR here, regardless of what r.currency says: this
+                    // import path has no conversion step, so the figures above are stored
+                    // exactly as parsed - tagging the row with a non-EUR currency without
+                    // actually converting it would make every EUR-assuming display (the
+                    // top-right switcher, totals, comparisons) show it wrong. Multi-currency
+                    // entry is only wired up on the Compensation & Benefits / Compensation
+                    // History edit dialogs for now.
                     await client.query(
                         `insert into employee_compensation
                             (employee_id, currency, base_salary, sti_target, lti_target, other_bonus,
                              allowance_company_car, allowance_mobility, allowance_home_office, allowance_private_medical, total_compensation)
-                         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                         values ($1,'EUR',$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
                         [
-                            employeeId, r.currency || "EUR", encryptAmount(r.base_salary), encryptAmount(stiTarget), encryptAmount(ltiTarget), encryptAmount(r.other_bonus),
+                            employeeId, encryptAmount(r.base_salary), encryptAmount(stiTarget), encryptAmount(ltiTarget), encryptAmount(r.other_bonus),
                             r.allowance_car, r.allowance_mobility, r.allowance_home_office, r.allowance_private_medical, encryptAmount(total),
                         ]
                     );

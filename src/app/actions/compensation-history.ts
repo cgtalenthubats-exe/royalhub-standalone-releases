@@ -4,12 +4,15 @@ import { query } from "@/lib/postgres/client";
 import { revalidatePath } from "next/cache";
 import { requireCompEditor } from "@/lib/permissions";
 import { encryptCompensationHistory } from "@/lib/compensation-crypto";
+import { getCurrentRate } from "@/app/actions/currency";
 
 export interface CompensationHistoryEntry {
     id: number;
     employee_id: number;
     fiscal_year: number;
     effective_date: string | null;
+    currency: string;            // the currency this row was entered in (source currency)
+    fx_rate_used: number | null; // rate_to_eur frozen at save time; null when currency is EUR
     base_salary: number | null;
     cash_allowance: number | null;
     sti_eligible_pct: number | null; // target the person was entitled to
@@ -51,6 +54,7 @@ function prorationFraction(fiscalYear: number, effectiveDate: string | null): nu
 export type CompHistoryInput = {
     fiscal_year: number;
     effective_date: string | null;
+    currency: string;
     base_salary: number | null;
     cash_allowance: number | null;
     sti_eligible_pct: number | null;
@@ -67,7 +71,28 @@ export type CompHistoryInput = {
     note: string | null;
 }
 
-function toRow(employeeId: number, input: CompHistoryInput) {
+const HIST_AMOUNT_KEYS = [
+    "base_salary", "cash_allowance", "sti_eligible_amount", "sti_amount",
+    "lti_eligible_amount", "lti_amount", "pension_contribution", "other_bonus",
+] as const; // money fields only - the *_pct fields are unitless and never convert
+
+// This row can be entered in GBP/CHF/DKK, not just EUR - every numeric
+// column always stores the EUR-equivalent, so totals/proration/comparisons
+// keep working untouched. Converts once, server-side, using today's rate;
+// that rate is frozen onto the row (fx_rate_used) so re-opening it later
+// shows back the exact figures that were typed, not a drifted value.
+async function convertHistoryToEur(input: CompHistoryInput): Promise<{ converted: CompHistoryInput; fxRateUsed: number | null; error?: string }> {
+    if (input.currency === "EUR") return { converted: input, fxRateUsed: null };
+    const rate = await getCurrentRate(input.currency);
+    if (!rate) return { converted: input, fxRateUsed: null, error: `No exchange rate set for ${input.currency} — add one in Settings > Currency first.` };
+    const converted = { ...input };
+    for (const key of HIST_AMOUNT_KEYS) {
+        if (converted[key] != null) converted[key] = Math.round((converted[key] as number) * rate);
+    }
+    return { converted, fxRateUsed: rate };
+}
+
+function toRow(employeeId: number, input: CompHistoryInput, currency: string, fxRateUsed: number | null) {
     // STI/LTI Actual and Pension now support dual %/amount entry on the
     // client (whichever side the person typed into is the source of truth
     // for that save, the other side is the client's own back-conversion for
@@ -87,6 +112,8 @@ function toRow(employeeId: number, input: CompHistoryInput) {
         employee_id: employeeId,
         fiscal_year: input.fiscal_year,
         effective_date: input.effective_date,
+        currency,
+        fx_rate_used: fxRateUsed,
         base_salary: input.base_salary,
         cash_allowance: input.cash_allowance,
         sti_eligible_pct: input.sti_eligible_pct,
@@ -108,18 +135,22 @@ function toRow(employeeId: number, input: CompHistoryInput) {
 // Create a new row, or replace the one already on that (employee, fiscal year).
 export async function upsertCompensationHistory(employeeId: number, input: CompHistoryInput): Promise<{ ok: boolean; error?: string }> {
     try { await requireCompEditor(); } catch (e: any) { return { ok: false, error: e.message }; }
-    const r = toRow(employeeId, input);
+    const { converted, fxRateUsed, error } = await convertHistoryToEur(input);
+    if (error) return { ok: false, error };
+    const r = toRow(employeeId, converted, input.currency, fxRateUsed);
     const enc = encryptCompensationHistory(r);
     try {
         await query(
             `insert into compensation_history
-                (employee_id, fiscal_year, effective_date, base_salary, cash_allowance,
+                (employee_id, fiscal_year, effective_date, currency, fx_rate_used, base_salary, cash_allowance,
                  sti_eligible_pct, sti_eligible_amount, sti_actual_pct, sti_amount,
                  lti_eligible_pct, lti_eligible_amount, lti_actual_pct, lti_amount,
                  pension_contribution, pension_pct, other_bonus, total_comp, note)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
              on conflict (employee_id, fiscal_year) do update set
                 effective_date = excluded.effective_date,
+                currency = excluded.currency,
+                fx_rate_used = excluded.fx_rate_used,
                 base_salary = excluded.base_salary,
                 cash_allowance = excluded.cash_allowance,
                 sti_eligible_pct = excluded.sti_eligible_pct,
@@ -135,7 +166,7 @@ export async function upsertCompensationHistory(employeeId: number, input: CompH
                 other_bonus = excluded.other_bonus,
                 total_comp = excluded.total_comp,
                 note = excluded.note`,
-            [enc.employee_id, enc.fiscal_year, enc.effective_date, enc.base_salary, enc.cash_allowance,
+            [enc.employee_id, enc.fiscal_year, enc.effective_date, enc.currency, enc.fx_rate_used, enc.base_salary, enc.cash_allowance,
              enc.sti_eligible_pct, enc.sti_eligible_amount, enc.sti_actual_pct, enc.sti_amount,
              enc.lti_eligible_pct, enc.lti_eligible_amount, enc.lti_actual_pct, enc.lti_amount,
              enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, enc.note]
@@ -150,17 +181,19 @@ export async function upsertCompensationHistory(employeeId: number, input: CompH
 // Edit an existing row by id (allows changing the fiscal year of that row).
 export async function updateCompensationHistory(id: number, employeeId: number, input: CompHistoryInput): Promise<{ ok: boolean; error?: string }> {
     try { await requireCompEditor(); } catch (e: any) { return { ok: false, error: e.message }; }
-    const r = toRow(employeeId, input);
+    const { converted, fxRateUsed, error } = await convertHistoryToEur(input);
+    if (error) return { ok: false, error };
+    const r = toRow(employeeId, converted, input.currency, fxRateUsed);
     const enc = encryptCompensationHistory(r);
     try {
         await query(
             `update compensation_history set
-                fiscal_year = $1, effective_date = $2, base_salary = $3, cash_allowance = $4,
-                sti_eligible_pct = $5, sti_eligible_amount = $6, sti_actual_pct = $7, sti_amount = $8,
-                lti_eligible_pct = $9, lti_eligible_amount = $10, lti_actual_pct = $11, lti_amount = $12,
-                pension_contribution = $13, pension_pct = $14, other_bonus = $15, total_comp = $16, note = $17
-             where id = $18 and employee_id = $19`,
-            [enc.fiscal_year, enc.effective_date, enc.base_salary, enc.cash_allowance,
+                fiscal_year = $1, effective_date = $2, currency = $3, fx_rate_used = $4, base_salary = $5, cash_allowance = $6,
+                sti_eligible_pct = $7, sti_eligible_amount = $8, sti_actual_pct = $9, sti_amount = $10,
+                lti_eligible_pct = $11, lti_eligible_amount = $12, lti_actual_pct = $13, lti_amount = $14,
+                pension_contribution = $15, pension_pct = $16, other_bonus = $17, total_comp = $18, note = $19
+             where id = $20 and employee_id = $21`,
+            [enc.fiscal_year, enc.effective_date, enc.currency, enc.fx_rate_used, enc.base_salary, enc.cash_allowance,
              enc.sti_eligible_pct, enc.sti_eligible_amount, enc.sti_actual_pct, enc.sti_amount,
              enc.lti_eligible_pct, enc.lti_eligible_amount, enc.lti_actual_pct, enc.lti_amount,
              enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, enc.note, id, employeeId]

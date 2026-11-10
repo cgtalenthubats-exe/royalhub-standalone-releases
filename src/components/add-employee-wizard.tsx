@@ -41,7 +41,7 @@ function emptyComp() {
 function emptyCareerDraft() { return { banner: "", position: "", location: "", start_date: "", end_date: "" }; }
 function emptyCompHistDraft(): CompHistoryInput & { key: number } {
     return {
-        key: Date.now(), fiscal_year: CURRENT_YEAR - 1, effective_date: null, base_salary: null, cash_allowance: null,
+        key: Date.now(), fiscal_year: CURRENT_YEAR - 1, effective_date: null, currency: "EUR", base_salary: null, cash_allowance: null,
         sti_eligible_pct: null, sti_eligible_amount: null, sti_actual_pct: null, sti_amount: null,
         lti_eligible_pct: null, lti_eligible_amount: null, lti_actual_pct: null, lti_amount: null,
         pension_contribution: null, pension_pct: null, other_bonus: null, note: null,

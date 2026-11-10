@@ -7,6 +7,7 @@ import { deleteEmployees } from "@/app/actions/employee-crud";
 import { formatCurrency, gradeColor } from "@/lib/format";
 import { EmployeeAvatar } from "@/components/employee-avatar";
 import { Money } from "@/components/comp-visibility";
+import { useCurrencyDisplay } from "@/components/currency-display";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Search, ChevronDown, Users, UserCheck, UserX, Euro, Trash2, Loader2, X } from "lucide-react";
@@ -26,6 +27,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
     employees: EmployeeListItem[]; initialQuery?: string; initialCompany?: string; initialCountry?: string; initialFunction?: string;
 }) {
     const router = useRouter();
+    const { displayCurrency, convert } = useCurrencyDisplay();
     const [q, setQ] = useState(initialQuery || "");
     const [banner, setBanner] = useState(initialCompany || "");
     const [country, setCountry] = useState(initialCountry || "");
@@ -107,7 +109,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                 <StatCard icon={Users} iconBg="bg-[#eff6ff]" iconColor="#2563eb" label={hasFilter ? "Showing" : "Total"} value={kpi.shown} sub={hasFilter ? `of ${employees.length} total` : "employees"} />
                 <StatCard icon={UserCheck} iconBg="bg-[#f0fdf4]" iconColor="#16a34a" label="Active" value={kpi.activeCount} sub={kpi.shown ? `${Math.round((kpi.activeCount / kpi.shown) * 100)}% of shown` : "—"} />
                 <StatCard icon={UserX} iconBg="bg-[#f8fafc]" iconColor="#64748b" label="Resigned" value={kpi.resignedCount} sub={hasFilter ? "in current filter" : "this year"} />
-                <StatCard icon={Euro} iconBg="bg-[#fffbeb]" iconColor="#d97706" label="Avg Total Comp" value={kpi.avgComp > 0 ? formatCurrency(kpi.avgComp) : "—"} sub={hasFilter ? "filtered average" : "across all"} />
+                <StatCard icon={Euro} iconBg="bg-[#fffbeb]" iconColor="#d97706" label="Avg Total Comp" value={kpi.avgComp > 0 ? formatCurrency(convert(kpi.avgComp), displayCurrency) : "—"} sub={hasFilter ? "filtered average" : "across all"} />
             </div>
 
             {/* Bulk-selection bar - only shown once something's checked, replaces nothing else */}

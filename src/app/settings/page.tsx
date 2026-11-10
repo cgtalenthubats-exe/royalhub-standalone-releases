@@ -4,8 +4,10 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { listBannersAdmin } from "@/app/actions/banners";
 import { getCompanySummary } from "@/app/actions/org";
 import { listFunctions } from "@/app/actions/positions";
+import { listCurrencyRates } from "@/app/actions/currency";
 import { BannersAdmin } from "./banners-admin";
 import { FunctionsAdmin } from "./functions-admin";
+import { CurrencyAdmin } from "./currency-admin";
 import { UserGuide } from "./user-guide";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -18,9 +20,9 @@ export default async function SettingsPage() {
     // requireSuper()-gated server-side (see permissions.ts audit finding) —
     // hiding the tabs for non-super users too, so the page doesn't show
     // controls that would just throw on click.
-    const [settings, banners, companySummary, functions] = isSuper
-        ? await Promise.all([listSettings(), listBannersAdmin(), getCompanySummary(), listFunctions()])
-        : [[], [], [], []];
+    const [settings, banners, companySummary, functions, currencyRates] = isSuper
+        ? await Promise.all([listSettings(), listBannersAdmin(), getCompanySummary(), listFunctions(), listCurrencyRates()])
+        : [[], [], [], [], []];
     return (
         <div className="flex min-h-full lg:h-full flex-col px-4 sm:px-7 pt-[22px] pb-[18px]">
             <div className="mb-4 shrink-0">
@@ -34,6 +36,7 @@ export default async function SettingsPage() {
                         {isSuper && <TabsTrigger value="keys">API Keys</TabsTrigger>}
                         {isSuper && <TabsTrigger value="company">Company</TabsTrigger>}
                         {isSuper && <TabsTrigger value="function">Function</TabsTrigger>}
+                        {isSuper && <TabsTrigger value="currency">Currency</TabsTrigger>}
                     </TabsList>
                     <TabsContent value="guide" className="space-y-8">
                         <div className="max-w-4xl"><UserGuide /></div>
@@ -48,6 +51,9 @@ export default async function SettingsPage() {
                             </TabsContent>
                             <TabsContent value="function" className="space-y-8">
                                 <div className="max-w-2xl"><FunctionsAdmin functions={functions} /></div>
+                            </TabsContent>
+                            <TabsContent value="currency" className="space-y-8">
+                                <div className="max-w-2xl"><CurrencyAdmin rates={currencyRates} /></div>
                             </TabsContent>
                         </>
                     ) : (

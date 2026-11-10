@@ -11,7 +11,7 @@ export type MoneyMode = "pct" | "amount";
 // และถ้าใส่ amount ไป มันก็ย้อนกลับมาเป็น %". Only the field the person is
 // actively editing drives the conversion; the untouched side is just a
 // read-out, so a field nobody touched can never drift from what's stored.
-export function DualModeMoneyInput({ mode, onModeChange, pct, amount, onChange, base, disabled }: {
+export function DualModeMoneyInput({ mode, onModeChange, pct, amount, onChange, base, disabled, currencyLabel = "€" }: {
     mode: MoneyMode;
     onModeChange: (m: MoneyMode) => void;
     pct: number | "";
@@ -19,6 +19,8 @@ export function DualModeMoneyInput({ mode, onModeChange, pct, amount, onChange, 
     onChange: (next: { pct: number | ""; amount: number | "" }) => void;
     base: number | null;
     disabled?: boolean;
+    /** Whatever currency `amount` is actually in - this card may be entered in GBP/CHF/DKK, not just EUR. */
+    currencyLabel?: string;
 }) {
     function setPct(p: number | "") {
         const amt: number | "" = p === "" || !base ? "" : Math.round((base * Number(p)) / 100);
@@ -37,7 +39,7 @@ export function DualModeMoneyInput({ mode, onModeChange, pct, amount, onChange, 
                 </button>
                 <button type="button" disabled={disabled} onClick={() => onModeChange("amount")}
                     className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors ${mode === "amount" ? "bg-[#0b1f3a] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                    €
+                    {currencyLabel}
                 </button>
             </div>
             {mode === "pct" ? (
@@ -48,7 +50,7 @@ export function DualModeMoneyInput({ mode, onModeChange, pct, amount, onChange, 
             {base ? (
                 <div className="mt-0.5 text-[10.5px] text-slate-400">
                     {mode === "pct"
-                        ? (amount === "" ? "= —" : `= €${Number(amount).toLocaleString()}`)
+                        ? (amount === "" ? "= —" : `= ${currencyLabel}${Number(amount).toLocaleString()}`)
                         : (pct === "" ? "= —" : `= ${pct}%`)}
                 </div>
             ) : null}

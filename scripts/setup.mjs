@@ -119,6 +119,53 @@ function ensureIcpdSchema() {
         console.log("Added compensation_history.lti_eligible_amount.");
     }
 
+    // Multi-currency entry: a comp record can be entered in GBP/CHF/DKK (not
+    // just EUR) - the numeric columns always stay the EUR-equivalent (every
+    // existing formula/total keeps working untouched), with the originally
+    // entered currency and the rate used at save time recorded alongside so
+    // the edit dialog can show the original figures back, not an EUR jumble.
+    // A literal string/NULL default (unlike CURRENT_TIMESTAMP earlier in this
+    // file) is a constant as far as SQLite's ADD COLUMN restriction is
+    // concerned, so this is safe as one statement even on a non-empty table.
+    if (!compHistCols.includes("currency")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN currency TEXT NOT NULL DEFAULT 'EUR'");
+        console.log("Added compensation_history.currency.");
+    }
+    if (!compHistCols.includes("fx_rate_used")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN fx_rate_used REAL");
+        console.log("Added compensation_history.fx_rate_used.");
+    }
+    const compCols2 = db.prepare("PRAGMA table_info(employee_compensation)").all().map((c) => c.name);
+    if (!compCols2.includes("fx_rate_used")) {
+        db.exec("ALTER TABLE employee_compensation ADD COLUMN fx_rate_used REAL");
+        console.log("Added employee_compensation.fx_rate_used.");
+    }
+
+    // currency_rates: brand new table for a database that predates this
+    // feature. CREATE TABLE IF NOT EXISTS alone would leave it permanently
+    // empty on such a database (nothing else ever seeds it), which breaks
+    // every non-EUR conversion outright - so an empty table is seeded here
+    // the same illustrative starting rates as a fresh install gets.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS currency_rates (
+          currency_code TEXT PRIMARY KEY,
+          rate_to_eur   REAL NOT NULL,
+          updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_by    TEXT
+        )
+    `);
+    const currencyRowCount = db.prepare("SELECT COUNT(*) AS n FROM currency_rates").get().n;
+    if (currencyRowCount === 0) {
+        db.exec(`
+            INSERT INTO currency_rates (currency_code, rate_to_eur, updated_by) VALUES
+              ('EUR', 1.0,         'system'),
+              ('GBP', 1.15,        'system'),
+              ('CHF', 1.06,        'system'),
+              ('DKK', 0.134228188, 'system')
+        `);
+        console.log("Seeded currency_rates with starting EUR/GBP/CHF/DKK rates.");
+    }
+
     // employee_background.type used to be CHECK-constrained to 3 fixed values;
     // the ICPD tab needs 2 more ('strength', 'development_area'). SQLite has
     // no ALTER ... DROP CONSTRAINT, so a still-constrained table is rebuilt

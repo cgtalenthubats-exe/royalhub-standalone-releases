@@ -61,10 +61,16 @@ export function yearsUntil(target: Date): number {
     return Math.max(0, years);
 }
 
+// DKK is conventionally written with "kr" AFTER the number ("1,200 kr"), not
+// before - everything else here goes in front.
+const SUFFIX_CURRENCIES = new Set(["DKK"]);
+const CURRENCY_SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", THB: "฿", GBP: "£", CHF: "CHF ", DKK: "kr" };
+
 export function formatCurrency(value: number | null | undefined, currency = "EUR"): string {
     if (value === null || value === undefined) return "-";
-    const symbol = currency === "EUR" ? "€" : currency === "USD" ? "$" : currency === "THB" ? "฿" : "";
-    return `${symbol}${Math.round(value).toLocaleString("en-US")}`;
+    const symbol = CURRENCY_SYMBOLS[currency] ?? "";
+    const amount = Math.round(value).toLocaleString("en-US");
+    return SUFFIX_CURRENCIES.has(currency) ? `${amount} ${symbol}` : `${symbol}${amount}`;
 }
 
 // Career History dates can be stored at day, month, or year precision (see

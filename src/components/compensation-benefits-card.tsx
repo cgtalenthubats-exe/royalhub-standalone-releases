@@ -12,6 +12,7 @@ import { DualModeMoneyInput, type MoneyMode } from "@/components/ui/dual-mode-mo
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/format";
 import { Money, useCompVisibility } from "@/components/comp-visibility";
+import { useCurrencyDisplay } from "@/components/currency-display";
 import { Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,37 +50,67 @@ const DISPLAY_FIELDS: { key: DualKey | MoneyKey | "base_salary"; label: string; 
 ];
 
 type DualFieldDraft = { pct: number | ""; amount: number | ""; mode: MoneyMode };
-type Draft = { base_salary: number | "" } & Record<DualKey, DualFieldDraft> & Record<MoneyKey, number | "">;
+type Draft = { currency: string; base_salary: number | "" } & Record<DualKey, DualFieldDraft> & Record<MoneyKey, number | "">;
 
+// Every stored amount is always the EUR-equivalent, regardless of what
+// currency this card was entered in (see employee-crud.ts) - re-opening it
+// for edit converts those back to the ORIGINAL local-currency figures using
+// the rate frozen at save time (fx_rate_used), not today's rate, so this
+// shows back exactly what was typed, never a value that's drifted since.
 function toDraft(c: Compensation | null): Draft {
-    const base = c?.base_salary ?? 0;
+    const rate = c && c.currency !== "EUR" && c.fx_rate_used ? c.fx_rate_used : null;
+    const back = (v: number | null): number | "" => {
+        if (v == null) return "";
+        return rate ? Math.round((v / rate) * 100) / 100 : v;
+    };
+    const base = back((c?.base_salary as number | null) ?? null);
+    const baseNum = Number(base) || 0;
     const dual = {} as Record<DualKey, DualFieldDraft>;
     DUAL_KEYS.forEach((k) => {
-        const amt = (c?.[k] as number | null) ?? null;
+        const amt = back((c?.[k] as number | null) ?? null);
         // Rounded to 2dp, not a whole number - rounding to a whole % (e.g.
         // 60,000/170,000 -> "35%") and then recomputing € from that on save
         // silently turned 60,000 into 59,500 even when the person never
-        // touched this field. The original € stays untouched (amount below)
+        // touched this field. The original stays untouched (amount below)
         // unless the person actually edits this pair, so a field nobody
         // touched can't drift regardless of rounding.
-        const pct = amt != null && base ? Math.round((amt / base) * 10000) / 100 : "";
-        dual[k] = { pct: pct === "" ? "" : pct, amount: amt ?? "", mode: "pct" };
+        const pct = amt !== "" && baseNum ? Math.round((Number(amt) / baseNum) * 10000) / 100 : "";
+        dual[k] = { pct, amount: amt, mode: "pct" };
     });
     const money = {} as Record<MoneyKey, number | "">;
-    MONEY_FIELDS.forEach((f) => { money[f.key] = (c?.[f.key] as number | null) ?? ""; });
-    return { base_salary: c?.base_salary ?? "", ...dual, ...money };
+    MONEY_FIELDS.forEach((f) => { money[f.key] = back((c?.[f.key] as number | null) ?? null); });
+    return { currency: c?.currency || "EUR", base_salary: base, ...dual, ...money };
 }
 
 export function CompensationBenefitsCard({ employeeId, compensation, totalCompensation, canEdit = true }: {
     employeeId: number; compensation: Compensation | null; totalCompensation: number | null; canEdit?: boolean;
 }) {
     const router = useRouter();
+    const { rates } = useCurrencyDisplay();
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [draft, setDraft] = useState<Draft>(toDraft(compensation));
     const [otherBenefit, setOtherBenefit] = useState(compensation?.allowance_family_cover || "");
 
     function openEdit() { setDraft(toDraft(compensation)); setOtherBenefit(compensation?.allowance_family_cover || ""); setOpen(true); }
+
+    // Switching "Entered in" mid-edit must re-express every figure already in
+    // the form in the new currency's magnitude, not just relabel it - every
+    // field here was typed assuming the OLD currency, so leaving the raw
+    // numbers untouched would silently turn e.g. a €220,000 base into a
+    // (much more valuable) CHF 220,000 the moment someone picks CHF without
+    // retyping every field by hand.
+    function changeCurrency(nextCurrency: string) {
+        const rateOf = (code: string) => (code === "EUR" ? 1 : rates[code] ?? 1);
+        const factor = rateOf(draft.currency) / rateOf(nextCurrency);
+        const conv = (v: number | ""): number | "" => (v === "" ? "" : Math.round(Number(v) * factor * 100) / 100);
+        setDraft((prev) => {
+            const next: Draft = { ...prev, currency: nextCurrency, base_salary: conv(prev.base_salary) };
+            DUAL_KEYS.forEach((k) => { next[k] = { ...prev[k], amount: conv(prev[k].amount) }; });
+            MONEY_FIELDS.forEach((f) => { (next as any)[f.key] = conv(prev[f.key]); });
+            return next;
+        });
+    }
 
     const draftBase = Number(draft.base_salary) || 0;
     function setDual(key: DualKey, next: { pct: number | ""; amount: number | "" }) {
@@ -96,12 +127,16 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
         + (Number(draft.other_bonus) || 0)
         + (Number(draft.allowance_company_car) || 0) + (Number(draft.allowance_mobility) || 0)
         + (Number(draft.allowance_home_office) || 0) + (Number(draft.allowance_private_medical) || 0);
+    // Today's rate, for a live "≈ €X" hint only - the actual conversion that
+    // gets stored uses whatever rate is current at the moment Save is
+    // clicked (see getCurrentRate in employee-crud.ts).
+    const draftRate = draft.currency !== "EUR" ? rates[draft.currency] : 1;
 
     async function save() {
         setSaving(true);
         const num = (v: number | "") => (v === "" ? null : v);
         const res = await updateEmployeeCompensation(employeeId, {
-            currency: compensation?.currency || "EUR",
+            currency: draft.currency,
             base_salary: num(draft.base_salary),
             sti_target: num(draft.sti_target.amount),
             sti_max: num(draft.sti_max.amount),
@@ -149,7 +184,7 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                             <td className="px-3.5 py-2 text-slate-500">{k}</td>
                             <td className="px-3.5 py-2 text-right font-mono font-medium text-[#0f172a]">
                                 {pct && <span className="mr-1.5 font-sans text-[10.5px] font-normal text-slate-400">({pct})</span>}
-                                <Money value={v} currency={c?.currency} />
+                                <Money value={v} />
                             </td>
                         </tr>
                     ))}
@@ -168,13 +203,30 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                 <DialogContent className="max-h-[85vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Edit Compensation &amp; Benefits</DialogTitle></DialogHeader>
                     <div className="space-y-4">
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Entered in</label>
+                            <select
+                                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                value={draft.currency}
+                                onChange={(e) => changeCurrency(e.target.value)}
+                            >
+                                {Object.keys(rates).sort((a, b) => (a === "EUR" ? -1 : b === "EUR" ? 1 : a.localeCompare(b))).map((code) => (
+                                    <option key={code} value={code}>{code}</option>
+                                ))}
+                            </select>
+                            {draft.currency !== "EUR" && (
+                                <p className="mt-1 text-[10.5px] text-slate-400">
+                                    Every amount below is in {draft.currency}. {draftRate ? `Saved as the EUR equivalent at today's rate (1 ${draft.currency} = ${Math.round(draftRate * 10000) / 10000} EUR).` : `No rate set for ${draft.currency} yet — add one in Settings > Currency before saving.`}
+                                </p>
+                            )}
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label className="mb-1 block text-xs font-medium text-slate-600">Base / Salary (€)</label>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">Base / Salary ({draft.currency})</label>
                                 <CommaNumberInput value={draft.base_salary} onChange={(v) => setDraft({ ...draft, base_salary: v })} />
                             </div>
                             <div>
-                                <label className="mb-1 block text-xs font-medium text-slate-600">Other Bonus (€)</label>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">Other Bonus ({draft.currency})</label>
                                 <CommaNumberInput value={draft.other_bonus} onChange={(v) => setDraft({ ...draft, other_bonus: v })} />
                             </div>
                         </div>
@@ -185,11 +237,11 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="mb-1 block text-[11px] text-slate-500">Target</label>
-                                    <DualModeMoneyInput mode={draft.sti_target.mode} onModeChange={(m) => setDualMode("sti_target", m)} pct={draft.sti_target.pct} amount={draft.sti_target.amount} base={draftBase} onChange={(next) => setDual("sti_target", next)} />
+                                    <DualModeMoneyInput mode={draft.sti_target.mode} onModeChange={(m) => setDualMode("sti_target", m)} pct={draft.sti_target.pct} amount={draft.sti_target.amount} base={draftBase} onChange={(next) => setDual("sti_target", next)} currencyLabel={draft.currency} />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-[11px] text-slate-500">Max</label>
-                                    <DualModeMoneyInput mode={draft.sti_max.mode} onModeChange={(m) => setDualMode("sti_max", m)} pct={draft.sti_max.pct} amount={draft.sti_max.amount} base={draftBase} onChange={(next) => setDual("sti_max", next)} />
+                                    <DualModeMoneyInput mode={draft.sti_max.mode} onModeChange={(m) => setDualMode("sti_max", m)} pct={draft.sti_max.pct} amount={draft.sti_max.amount} base={draftBase} onChange={(next) => setDual("sti_max", next)} currencyLabel={draft.currency} />
                                 </div>
                             </div>
                         </div>
@@ -200,11 +252,11 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="mb-1 block text-[11px] text-slate-500">Target</label>
-                                    <DualModeMoneyInput mode={draft.lti_target.mode} onModeChange={(m) => setDualMode("lti_target", m)} pct={draft.lti_target.pct} amount={draft.lti_target.amount} base={draftBase} onChange={(next) => setDual("lti_target", next)} />
+                                    <DualModeMoneyInput mode={draft.lti_target.mode} onModeChange={(m) => setDualMode("lti_target", m)} pct={draft.lti_target.pct} amount={draft.lti_target.amount} base={draftBase} onChange={(next) => setDual("lti_target", next)} currencyLabel={draft.currency} />
                                 </div>
                                 <div>
                                     <label className="mb-1 block text-[11px] text-slate-500">Max</label>
-                                    <DualModeMoneyInput mode={draft.lti_max.mode} onModeChange={(m) => setDualMode("lti_max", m)} pct={draft.lti_max.pct} amount={draft.lti_max.amount} base={draftBase} onChange={(next) => setDual("lti_max", next)} />
+                                    <DualModeMoneyInput mode={draft.lti_max.mode} onModeChange={(m) => setDualMode("lti_max", m)} pct={draft.lti_max.pct} amount={draft.lti_max.amount} base={draftBase} onChange={(next) => setDual("lti_max", next)} currencyLabel={draft.currency} />
                                 </div>
                             </div>
                         </div>
@@ -212,7 +264,7 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {ALLOWANCE_FIELDS.map((f) => (
                                 <div key={f.key}>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">{f.label} (€)</label>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">{f.label} ({draft.currency})</label>
                                     <CommaNumberInput value={draft[f.key]} onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
                                 </div>
                             ))}
@@ -224,7 +276,12 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                     </div>
                     <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
                         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total Comp (base + STI + LTI + other bonus + allowances)</span>
-                        <span className="text-[15px] font-extrabold tabular-nums text-[#0b1f3a]">{formatCurrency(draftTotal)}</span>
+                        <div className="text-right">
+                            <span className="text-[15px] font-extrabold tabular-nums text-[#0b1f3a]">{formatCurrency(draftTotal, draft.currency)}</span>
+                            {draft.currency !== "EUR" && draftRate ? (
+                                <div className="text-[10.5px] text-slate-400">≈ {formatCurrency(Math.round(draftTotal * draftRate), "EUR")} at today's rate</div>
+                            ) : null}
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

@@ -159,14 +159,31 @@ CREATE TABLE departments (
 CREATE INDEX idx_departments_owner ON departments(owner_employee_id);
 CREATE INDEX idx_departments_office ON departments(office_id);
 
+-- EUR is the fixed base/anchor currency (rate_to_eur = 1.0, not editable) -
+-- every other currency stores "1 unit = ? EUR" so converting between any two
+-- non-EUR currencies routes through EUR (triangulation) instead of needing a
+-- full N×N rate matrix. Manual entry only (this app runs offline) - a Super
+-- user updates these from Settings > Currency; updated_at/updated_by are
+-- shown there so nobody mistakes a stale rate for a live one. Any amount
+-- already saved keeps whatever rate was in effect when it was saved (see
+-- employee_compensation.fx_rate_used / compensation_history.fx_rate_used) -
+-- changing a rate here only affects new saves going forward.
+CREATE TABLE currency_rates (
+  currency_code TEXT PRIMARY KEY,
+  rate_to_eur   REAL NOT NULL,
+  updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_by    TEXT
+);
+
 -- ── Compensation (fields below are stored ENCRYPTED as base64 text — see
 --    src/lib/crypto.ts. Column type is TEXT even though the values are
 --    logically numeric.) ────────────────────────────────────────────────
 
 CREATE TABLE employee_compensation (
   employee_id               INTEGER PRIMARY KEY REFERENCES employees(employee_id),
-  currency                  TEXT NOT NULL DEFAULT 'EUR',
-  base_salary               TEXT,  -- encrypted
+  currency                  TEXT NOT NULL DEFAULT 'EUR', -- the currency this record was entered in (source currency)
+  fx_rate_used              REAL,  -- rate_to_eur frozen at save time; NULL when currency='EUR' (no conversion needed)
+  base_salary               TEXT,  -- encrypted; always the EUR-equivalent, regardless of currency above
   sti_target                TEXT,  -- encrypted
   sti_max                   TEXT,  -- encrypted
   lti_target                TEXT,  -- encrypted
@@ -186,7 +203,9 @@ CREATE TABLE compensation_history (
   employee_id       INTEGER NOT NULL REFERENCES employees(employee_id),
   fiscal_year       INTEGER NOT NULL,
   effective_date    TEXT,
-  base_salary       TEXT,  -- encrypted
+  currency          TEXT NOT NULL DEFAULT 'EUR', -- the currency this row was entered in (source currency)
+  fx_rate_used      REAL,  -- rate_to_eur frozen at save time; NULL when currency='EUR'
+  base_salary       TEXT,  -- encrypted; always the EUR-equivalent, regardless of currency above
   total_comp        TEXT,  -- encrypted
   adjustment_amount REAL,
   cash_allowance    REAL,
@@ -536,3 +555,11 @@ INSERT INTO banner_offices (banner_id, country, city, is_hq) VALUES
   (6, 'Germany',        'Berlin',      0),
   (7, 'Italy',          'Milan',       0),
   (8, 'Switzerland',    'Zurich',      0);
+
+-- Starting rates only - illustrative, not guaranteed current. A Super user
+-- should verify/update these from Settings > Currency before relying on them.
+INSERT INTO currency_rates (currency_code, rate_to_eur, updated_by) VALUES
+  ('EUR', 1.0,          'system'),
+  ('GBP', 1.15,         'system'),
+  ('CHF', 1.06,         'system'),
+  ('DKK', 0.134228188,  'system');
