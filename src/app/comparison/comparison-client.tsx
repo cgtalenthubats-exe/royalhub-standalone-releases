@@ -14,6 +14,7 @@ import { Trophy, Clock, CalendarPlus, Users, Download, X, Plus, Printer, FileDow
 import { buildComparisonHtml } from "./export-html";
 import { exportComparisonPptx } from "@/lib/pptx-export";
 import { EmployeeAvatar } from "@/components/employee-avatar";
+import { useCurrencyDisplay } from "@/components/currency-display";
 
 const MAX = 5;
 
@@ -23,6 +24,11 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
     const [simulated, setSimulated] = useState<EmployeeDetail[]>([]);
     const [loading, setLoading] = useState(false);
     const [compOnly, setCompOnly] = useState(false);
+    const { convert, displayCurrency } = useCurrencyDisplay();
+    // On-screen only - exports (PDF/HTML/PPTX) always render the raw EUR
+    // figures for audit consistency, regardless of the viewer's display
+    // currency (see export-html.ts / pptx-export.ts, untouched by this).
+    const fmt = (v: number | null | undefined) => formatCurrency(v == null ? v : convert(v), displayCurrency);
 
     // what-if: base employee + new total/base → adds a simulated "(adjusted)" column
     const [simBase, setSimBase] = useState<number | "">("");
@@ -67,9 +73,9 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
 
     const badges = useMemo(() => computeBadges(allDetails), [allDetails]);
     const chartData = useMemo(
-        () => allDetails.map((d) => ({ name: d.name.includes("(adjusted)") ? d.name.replace(" (adjusted)", "*") : d.name.split(" ")[0], value: compOnly ? compensationOnly(d.compensation) : (d.total_compensation || 0), id: d.employee_id }))
+        () => allDetails.map((d) => ({ name: d.name.includes("(adjusted)") ? d.name.replace(" (adjusted)", "*") : d.name.split(" ")[0], value: convert(compOnly ? compensationOnly(d.compensation) : (d.total_compensation || 0)), id: d.employee_id }))
             .sort((a, b) => b.value - a.value),
-        [allDetails, compOnly]
+        [allDetails, compOnly, convert]
     );
 
     function exportHtml() {
@@ -196,7 +202,7 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
 
                     {/* Summary badges */}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <BadgeCard icon={Trophy} label="Highest Total Comp" name={badges.highestComp?.name} value={formatCurrency(badges.highestComp?.total_compensation)} />
+                        <BadgeCard icon={Trophy} label="Highest Total Comp" name={badges.highestComp?.name} value={fmt(badges.highestComp?.total_compensation)} />
                         <BadgeCard icon={Clock} label="Longest Tenure" name={badges.longestTenure?.name} value={formatYears(badges.longestTenure?.hire_date)} />
                         <BadgeCard icon={CalendarPlus} label="Newest in Role" name={badges.newestRole?.name} value={formatYears(badges.newestRole?.position_effective_date)} />
                         <BadgeCard icon={Users} label="Largest Team" name={badges.largestTeam?.name} value={`${badges.largestTeam?.team_size ?? 0} reports`} />
@@ -216,7 +222,7 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                                 <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 10 }}>
                                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                                     <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}K`} tick={{ fontSize: 11 }} />
-                                    <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                                    <Tooltip formatter={(v: any) => fmt(Number(v))} />
                                     <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                                         {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? "#0b1f3a" : "#3b6ea5"} />)}
                                     </Bar>
@@ -239,17 +245,17 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                     ]} />
 
                     <CompareTable title="Compensation & Benefits" mono details={allDetails} rows={[
-                        ["Total Compensation", (d) => formatCurrency(d.total_compensation)],
-                        ["Base / Salary", (d) => formatCurrency(d.compensation?.base_salary)],
-                        ["STI Target", (d) => formatCurrency(d.compensation?.sti_target)],
-                        ["LTI Target", (d) => formatCurrency(d.compensation?.lti_target)],
-                        ["STI Max", (d) => formatCurrency(d.compensation?.sti_max)],
-                        ["LTI Max", (d) => formatCurrency(d.compensation?.lti_max)],
-                        ["Other Bonus", (d) => formatCurrency(d.compensation?.other_bonus)],
-                        ["Allowance · Car", (d) => formatCurrency(d.compensation?.allowance_company_car)],
-                        ["Allowance · Mobile", (d) => formatCurrency(d.compensation?.allowance_mobility)],
-                        ["Allowance · Housing", (d) => formatCurrency(d.compensation?.allowance_home_office)],
-                        ["Benefit · Medical", (d) => formatCurrency(d.compensation?.allowance_private_medical)],
+                        ["Total Compensation", (d) => fmt(d.total_compensation)],
+                        ["Base / Salary", (d) => fmt(d.compensation?.base_salary)],
+                        ["STI Target", (d) => fmt(d.compensation?.sti_target)],
+                        ["LTI Target", (d) => fmt(d.compensation?.lti_target)],
+                        ["STI Max", (d) => fmt(d.compensation?.sti_max)],
+                        ["LTI Max", (d) => fmt(d.compensation?.lti_max)],
+                        ["Other Bonus", (d) => fmt(d.compensation?.other_bonus)],
+                        ["Allowance · Car", (d) => fmt(d.compensation?.allowance_company_car)],
+                        ["Allowance · Mobile", (d) => fmt(d.compensation?.allowance_mobility)],
+                        ["Allowance · Housing", (d) => fmt(d.compensation?.allowance_home_office)],
+                        ["Benefit · Medical", (d) => fmt(d.compensation?.allowance_private_medical)],
                         ["Other benefit (please specify)", (d) => d.compensation?.allowance_family_cover || "—"],
                     ]} />
 
