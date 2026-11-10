@@ -181,7 +181,12 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                 <tbody className="divide-y divide-slate-100">
                     {rows.map(([k, v, pct]) => (
                         <tr key={k}>
-                            <td className="px-3.5 py-2 text-slate-500">{k}</td>
+                            <td className="px-3.5 py-2 text-slate-500">
+                                {k}
+                                {k === "Compensation (Total)" && c && c.currency !== "EUR" && (
+                                    <div className="text-[9px] font-normal text-slate-400">entered in {c.currency}</div>
+                                )}
+                            </td>
                             <td className="px-3.5 py-2 text-right font-mono font-medium text-[#0f172a]">
                                 {pct && <span className="mr-1.5 font-sans text-[10.5px] font-normal text-slate-400">({pct})</span>}
                                 <Money value={v} />
