@@ -160,7 +160,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                             />
                             <div>Employee</div>
                             <div>Position</div>
-                            <div>Country</div>
+                            <div>Banner</div>
                             <div>Grade</div>
                             <div>Total Comp</div>
                             <div>FY25</div>
@@ -194,7 +194,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                                             <span className="font-bold text-[#0f172a] truncate">{e.name}</span>
                                         </div>
                                         <div className="text-slate-600 truncate pr-2">{e.position_title || "—"}</div>
-                                        <div className="text-slate-500">{e.country || "—"}</div>
+                                        <div className="text-slate-500 truncate pr-2">{e.banner_name || "—"}</div>
                                         <div>
                                             {e.job_grade && (
                                                 <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded ${gradeChip(e.job_grade)}`}>
