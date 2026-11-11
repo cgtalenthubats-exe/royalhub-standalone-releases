@@ -141,6 +141,21 @@ function ensureIcpdSchema() {
         console.log("Added employee_compensation.fx_rate_used.");
     }
 
+    // local_values: a row saved before this column existed just has NULL here
+    // forever (no backfill attempted - decrypting old EUR figures to rebuild
+    // it would need the encryption key wired into this plain migration
+    // script) and keeps falling back to back-converting its EUR columns via
+    // fx_rate_used, exactly like before this feature; only a fresh save
+    // populates it going forward.
+    if (!compCols2.includes("local_values")) {
+        db.exec("ALTER TABLE employee_compensation ADD COLUMN local_values TEXT");
+        console.log("Added employee_compensation.local_values.");
+    }
+    if (!compHistCols.includes("local_values")) {
+        db.exec("ALTER TABLE compensation_history ADD COLUMN local_values TEXT");
+        console.log("Added compensation_history.local_values.");
+    }
+
     // currency_rates: brand new table for a database that predates this
     // feature. CREATE TABLE IF NOT EXISTS alone would leave it permanently
     // empty on such a database (nothing else ever seeds it), which breaks

@@ -195,6 +195,14 @@ CREATE TABLE employee_compensation (
   allowance_private_medical REAL,
   allowance_family_cover    TEXT,  -- free text, not encrypted (mig 023)
   total_compensation        TEXT,  -- encrypted
+  -- Encrypted JSON blob: every amount field above exactly as typed, in
+  -- `currency` (plus a local total_compensation) - NULL when currency='EUR'
+  -- (nothing to store, the EUR columns already are the local figures) or for
+  -- a row saved before this column existed. Lets "Local" display read the
+  -- original figures straight back instead of back-converting the EUR
+  -- columns through fx_rate_used, which drifts every time this row is
+  -- resaved under a different day's rate (see src/lib/compensation-crypto.ts).
+  local_values              TEXT,
   updated_at                TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -220,6 +228,11 @@ CREATE TABLE compensation_history (
   pension_contribution REAL,
   pension_pct       REAL,  -- display-only; pension_contribution (€) is the stored source of truth
   other_bonus       TEXT,  -- encrypted
+  -- Encrypted JSON blob, same purpose as employee_compensation.local_values
+  -- above: every amount field on this row exactly as typed, plus a local
+  -- total_comp. NULL when currency='EUR' or for a row saved before this
+  -- column existed.
+  local_values      TEXT,
   note              TEXT,
   UNIQUE (employee_id, fiscal_year)
 );

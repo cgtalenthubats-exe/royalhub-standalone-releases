@@ -3,7 +3,7 @@
 import { query } from "@/lib/postgres/client";
 import { revalidatePath } from "next/cache";
 import { requireCompEditor } from "@/lib/permissions";
-import { encryptCompensationHistory } from "@/lib/compensation-crypto";
+import { encryptCompensationHistory, encryptLocalValues } from "@/lib/compensation-crypto";
 import { getCurrentRate } from "@/app/actions/currency";
 
 export interface CompensationHistoryEntry {
@@ -27,6 +27,10 @@ export interface CompensationHistoryEntry {
     pension_pct: number | null;          // display-only equivalent of pension_contribution
     other_bonus: number | null;
     total_comp: number | null;       // derived: everything above, prorated by effective_date
+    // Every amount field above exactly as typed, in `currency`, plus a local
+    // total_comp - null when currency is EUR or for a row saved before this
+    // existed (see buildLocalValues/localDisplay in @/lib/format).
+    local_values: Record<string, number | null> | null;
     note: string | null;
 }
 
@@ -87,9 +91,30 @@ async function convertHistoryToEur(input: CompHistoryInput): Promise<{ converted
     if (!rate) return { converted: input, fxRateUsed: null, error: `No exchange rate set for ${input.currency} — add one in Settings > Currency first.` };
     const converted = { ...input };
     for (const key of HIST_AMOUNT_KEYS) {
-        if (converted[key] != null) converted[key] = Math.round((converted[key] as number) * rate);
+        // Two decimal places, not a whole EUR - see the identical note in
+        // convertCompToEur (employee-crud.ts): rounding every field to a
+        // whole EUR before summing them into total_comp and converting back
+        // for display (toLocalAmount in @/lib/format) visibly drifts the
+        // total, worse the further the currency's rate is from 1:1 with EUR.
+        if (converted[key] != null) converted[key] = Math.round((converted[key] as number) * rate * 100) / 100;
     }
     return { converted, fxRateUsed: rate };
+}
+
+// The figures exactly as typed (pre-conversion `input`, not `converted`),
+// kept verbatim so "Local" display never has to be reverse-engineered from
+// the EUR columns again - same purpose and shape as employee-crud.ts's
+// buildLocalValues, just using this row's own total formula/proration.
+// NULL for a EUR row - the EUR columns already are the local figures.
+function buildLocalValues(input: CompHistoryInput): Record<string, number | null> | null {
+    if (input.currency === "EUR") return null;
+    const out: Record<string, number | null> = {};
+    for (const key of HIST_AMOUNT_KEYS) out[key] = input[key] ?? null;
+    const fullYearTotal = (input.base_salary ?? 0) + (input.sti_amount ?? 0) + (input.lti_amount ?? 0)
+        + (input.cash_allowance ?? 0) + (input.pension_contribution ?? 0) + (input.other_bonus ?? 0);
+    const fraction = prorationFraction(input.fiscal_year, input.effective_date);
+    out.total_comp = fraction < 1 ? Math.round(fullYearTotal * fraction) : fullYearTotal;
+    return out;
 }
 
 function toRow(employeeId: number, input: CompHistoryInput, currency: string, fxRateUsed: number | null) {
@@ -139,14 +164,15 @@ export async function upsertCompensationHistory(employeeId: number, input: CompH
     if (error) return { ok: false, error };
     const r = toRow(employeeId, converted, input.currency, fxRateUsed);
     const enc = encryptCompensationHistory(r);
+    const local_values = encryptLocalValues(buildLocalValues(input));
     try {
         await query(
             `insert into compensation_history
                 (employee_id, fiscal_year, effective_date, currency, fx_rate_used, base_salary, cash_allowance,
                  sti_eligible_pct, sti_eligible_amount, sti_actual_pct, sti_amount,
                  lti_eligible_pct, lti_eligible_amount, lti_actual_pct, lti_amount,
-                 pension_contribution, pension_pct, other_bonus, total_comp, note)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+                 pension_contribution, pension_pct, other_bonus, total_comp, local_values, note)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
              on conflict (employee_id, fiscal_year) do update set
                 effective_date = excluded.effective_date,
                 currency = excluded.currency,
@@ -165,11 +191,12 @@ export async function upsertCompensationHistory(employeeId: number, input: CompH
                 pension_pct = excluded.pension_pct,
                 other_bonus = excluded.other_bonus,
                 total_comp = excluded.total_comp,
+                local_values = excluded.local_values,
                 note = excluded.note`,
             [enc.employee_id, enc.fiscal_year, enc.effective_date, enc.currency, enc.fx_rate_used, enc.base_salary, enc.cash_allowance,
              enc.sti_eligible_pct, enc.sti_eligible_amount, enc.sti_actual_pct, enc.sti_amount,
              enc.lti_eligible_pct, enc.lti_eligible_amount, enc.lti_actual_pct, enc.lti_amount,
-             enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, enc.note]
+             enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, local_values, enc.note]
         );
     } catch (err: any) {
         return { ok: false, error: err.message };
@@ -185,18 +212,19 @@ export async function updateCompensationHistory(id: number, employeeId: number, 
     if (error) return { ok: false, error };
     const r = toRow(employeeId, converted, input.currency, fxRateUsed);
     const enc = encryptCompensationHistory(r);
+    const local_values = encryptLocalValues(buildLocalValues(input));
     try {
         await query(
             `update compensation_history set
                 fiscal_year = $1, effective_date = $2, currency = $3, fx_rate_used = $4, base_salary = $5, cash_allowance = $6,
                 sti_eligible_pct = $7, sti_eligible_amount = $8, sti_actual_pct = $9, sti_amount = $10,
                 lti_eligible_pct = $11, lti_eligible_amount = $12, lti_actual_pct = $13, lti_amount = $14,
-                pension_contribution = $15, pension_pct = $16, other_bonus = $17, total_comp = $18, note = $19
-             where id = $20 and employee_id = $21`,
+                pension_contribution = $15, pension_pct = $16, other_bonus = $17, total_comp = $18, local_values = $19, note = $20
+             where id = $21 and employee_id = $22`,
             [enc.fiscal_year, enc.effective_date, enc.currency, enc.fx_rate_used, enc.base_salary, enc.cash_allowance,
              enc.sti_eligible_pct, enc.sti_eligible_amount, enc.sti_actual_pct, enc.sti_amount,
              enc.lti_eligible_pct, enc.lti_eligible_amount, enc.lti_actual_pct, enc.lti_amount,
-             enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, enc.note, id, employeeId]
+             enc.pension_contribution, enc.pension_pct, enc.other_bonus, enc.total_comp, local_values, enc.note, id, employeeId]
         );
     } catch (err: any) {
         return { ok: false, error: err.message };

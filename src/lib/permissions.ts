@@ -51,6 +51,7 @@ const NULLED_LIST = {
     other_bonus: null,
     currency: "EUR",
     fx_rate_used: null,
+    local_total_compensation: null,
 } as const;
 
 export function redactListItem(e: EmployeeListItem, seeComp: boolean, seePersonal: boolean): EmployeeListItem {

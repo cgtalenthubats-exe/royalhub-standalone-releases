@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency, toLocalAmount } from "@/lib/format";
+import { formatCurrency, localDisplay } from "@/lib/format";
 import { useCurrencyRates } from "@/components/currency-display";
 import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
 
@@ -46,14 +46,17 @@ function emptyDraft(): Draft {
     };
 }
 
-// A saved row's own amount columns are always the EUR-equivalent, regardless
-// of what currency it was entered in - re-opening it for edit converts those
-// back to the ORIGINAL local-currency figures using the rate frozen on the
-// row at save time (fx_rate_used), not today's rate, so the dialog shows
-// back exactly what was typed, never a value that's drifted since.
+// A non-EUR row stores the figures exactly as typed in local_values (see
+// compensation-history.ts) - re-opening it for edit reads those straight
+// back, no conversion involved, so it can never drift. local_values is only
+// null for a row saved before this existed, or saved in EUR to begin with -
+// for those, fall back to back-converting the stored EUR via the rate
+// frozen at that save (the old behavior).
 function toDraft(h: CompensationHistoryEntry): Draft {
+    const lv = h.local_values;
     const rate = h.currency !== "EUR" && h.fx_rate_used ? h.fx_rate_used : null;
-    const back = (v: number | null): number | "" => {
+    const back = (key: string, v: number | null): number | "" => {
+        if (lv && lv[key] != null) return lv[key] as number;
         if (v == null) return "";
         return rate ? Math.round((v / rate) * 100) / 100 : v;
     };
@@ -62,15 +65,15 @@ function toDraft(h: CompensationHistoryEntry): Draft {
         fiscal_year: n(h.fiscal_year) ?? "",
         effective_date: h.effective_date || "",
         currency: h.currency || "EUR",
-        base_salary: back(n(h.base_salary)),
-        cash_allowance: back(n(h.cash_allowance)),
-        other_bonus: back(n(h.other_bonus)),
+        base_salary: back("base_salary", n(h.base_salary)),
+        cash_allowance: back("cash_allowance", n(h.cash_allowance)),
+        other_bonus: back("other_bonus", n(h.other_bonus)),
         note: h.note || "",
-        sti_eligible: { pct: n(h.sti_eligible_pct) ?? "", amount: back(n(h.sti_eligible_amount)), mode: "pct" },
-        sti_actual: { pct: n(h.sti_actual_pct) ?? "", amount: back(n(h.sti_amount)), mode: "pct" },
-        lti_eligible: { pct: n(h.lti_eligible_pct) ?? "", amount: back(n(h.lti_eligible_amount)), mode: "pct" },
-        lti_actual: { pct: n(h.lti_actual_pct) ?? "", amount: back(n(h.lti_amount)), mode: "pct" },
-        pension: { pct: n(h.pension_pct) ?? "", amount: back(n(h.pension_contribution)), mode: "amount" },
+        sti_eligible: { pct: n(h.sti_eligible_pct) ?? "", amount: back("sti_eligible_amount", n(h.sti_eligible_amount)), mode: "pct" },
+        sti_actual: { pct: n(h.sti_actual_pct) ?? "", amount: back("sti_amount", n(h.sti_amount)), mode: "pct" },
+        lti_eligible: { pct: n(h.lti_eligible_pct) ?? "", amount: back("lti_eligible_amount", n(h.lti_eligible_amount)), mode: "pct" },
+        lti_actual: { pct: n(h.lti_actual_pct) ?? "", amount: back("lti_amount", n(h.lti_amount)), mode: "pct" },
+        pension: { pct: n(h.pension_pct) ?? "", amount: back("pension_contribution", n(h.pension_contribution)), mode: "amount" },
     };
 }
 
@@ -221,8 +224,8 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                             // one history card can hold a GBP year next to a CHF year next
                             // to a EUR year, each shown as it was actually entered - the
                             // toggle above forces every row to EUR instead.
-                            const fmt = (v: number | null) => {
-                                const conv = mode === "eur" ? { value: v, currency: "EUR" } : toLocalAmount(v, h.currency, h.fx_rate_used);
+                            const fmt = (v: number | null, key: string) => {
+                                const conv = mode === "eur" ? { value: v, currency: "EUR" } : localDisplay(h.local_values?.[key], v, h.currency, h.fx_rate_used);
                                 return formatCurrency(conv.value, conv.currency);
                             };
                             return (
@@ -231,19 +234,19 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                                     {h.fiscal_year}A
                                     {h.currency !== "EUR" && <div className="text-[9px] font-normal text-slate-400">entered in {h.currency}</div>}
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{fmt(n(h.base_salary))}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.cash_allowance))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{fmt(n(h.base_salary), "base_salary")}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.cash_allowance), "cash_allowance")}</td>
                                 <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                                    {fmt(n(h.sti_amount))}
+                                    {fmt(n(h.sti_amount), "sti_amount")}
                                     <div className="text-[9.5px] text-slate-400">{pctPair(n(h.sti_actual_pct), n(h.sti_eligible_pct))}</div>
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                                    {fmt(n(h.lti_amount))}
+                                    {fmt(n(h.lti_amount), "lti_amount")}
                                     <div className="text-[9.5px] text-slate-400">{pctPair(n(h.lti_actual_pct), n(h.lti_eligible_pct))}</div>
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.pension_contribution))}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.other_bonus))}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-bold text-[#0b1f3a]">{fmt(n(h.total_comp))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.pension_contribution), "pension_contribution")}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.other_bonus), "other_bonus")}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-bold text-[#0b1f3a]">{fmt(n(h.total_comp), "total_comp")}</td>
                                 <td className="px-3 py-2">
                                     {canEdit && (
                                         <div className="flex items-center justify-end gap-1">

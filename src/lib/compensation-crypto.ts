@@ -32,18 +32,35 @@ function encryptFields<T extends Record<string, any>>(input: T, fields: readonly
     return out;
 }
 
+// local_values is a whole JSON object per row (every amount field exactly as
+// typed, not a single number), so it decrypts via decryptJson rather than
+// decryptFields' per-field decryptAmount loop above.
+function decryptLocalValues<T extends Record<string, any>>(row: T): T {
+    if (!("local_values" in row)) return row;
+    return { ...row, local_values: decryptJson(row.local_values) };
+}
+
 export function decryptEmployeeCompensation<T extends Record<string, any>>(row: T): T {
-    return decryptFields(row, EMPLOYEE_COMPENSATION_FIELDS);
+    return decryptLocalValues(decryptFields(row, EMPLOYEE_COMPENSATION_FIELDS));
 }
 export function encryptEmployeeCompensation<T extends Record<string, any>>(input: T): T {
     return encryptFields(input, EMPLOYEE_COMPENSATION_FIELDS);
 }
 
 export function decryptCompensationHistory<T extends Record<string, any>>(row: T): T {
-    return decryptFields(row, COMPENSATION_HISTORY_FIELDS);
+    return decryptLocalValues(decryptFields(row, COMPENSATION_HISTORY_FIELDS));
 }
 export function encryptCompensationHistory<T extends Record<string, any>>(input: T): T {
     return encryptFields(input, COMPENSATION_HISTORY_FIELDS);
+}
+
+// Encrypts the local_values JSON object for an insert/update - the counterpart
+// to decryptLocalValues above. Exported directly (not folded into
+// encryptEmployeeCompensation/encryptCompensationHistory) since the callers
+// build this object themselves from the raw, pre-conversion input rather than
+// from the same shape those two functions take.
+export function encryptLocalValues(value: Record<string, number | null> | null): string | null {
+    return value ? encryptJson(value) : null;
 }
 
 export function decryptProposalCompensation<T extends Record<string, any>>(row: T): T {

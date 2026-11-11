@@ -90,6 +90,24 @@ export function toLocalAmount(
     return { value: Math.round((eurValue / fxRateUsed) * 100) / 100, currency };
 }
 
+// A non-EUR record now stores the figure exactly as typed (see local_values
+// in employee-crud.ts/compensation-history.ts) - read that back directly
+// instead of reverse-engineering it from the EUR column, which drifts every
+// time the record is resaved under a different day's rate. `localValue` is
+// only null for a record saved before local_values existed, or one saved in
+// EUR to begin with - that's the only case this falls back to the old
+// back-conversion (toLocalAmount above).
+export function localDisplay(
+    localValue: number | null | undefined,
+    eurValue: number | null | undefined,
+    currency: string | null | undefined,
+    fxRateUsed: number | null | undefined
+): { value: number | null; currency: string } {
+    if (!currency || currency === "EUR") return { value: eurValue ?? null, currency: "EUR" };
+    if (localValue != null) return { value: localValue, currency };
+    return toLocalAmount(eurValue, currency, fxRateUsed);
+}
+
 // Career History dates can be stored at day, month, or year precision (see
 // @/components/precision-date-input) - "2025" and "2025-02" both parse fine
 // as a Date (midnight Jan 1 / Feb 1), so they're matched explicitly before

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireCompEditor, canSeePersonal } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { encryptAmount } from "@/lib/crypto";
+import { encryptLocalValues } from "@/lib/compensation-crypto";
 import { getCurrentRate } from "@/app/actions/currency";
 
 export interface NewEmployeeInput {
@@ -222,15 +223,16 @@ export async function createEmployeeFull(input: NewEmployeeFullInput): Promise<{
             // once a rate is set in Settings > Currency.
             if (!error) {
                 const total_compensation = totalCompensationOf(converted);
+                const local_values = buildLocalValues(c, currency);
                 await query(
                     `insert into employee_compensation
                         (employee_id, currency, fx_rate_used, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
                          allowance_company_car, allowance_mobility, allowance_home_office, allowance_private_medical,
-                         allowance_family_cover, total_compensation)
-                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+                         allowance_family_cover, total_compensation, local_values)
+                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
                     [employeeId, currency, fxRateUsed, encryptAmount(converted.base_salary), encryptAmount(converted.sti_target), encryptAmount(converted.sti_max), encryptAmount(converted.lti_target), encryptAmount(converted.lti_max), encryptAmount(converted.other_bonus),
                      converted.allowance_company_car, converted.allowance_mobility, converted.allowance_home_office, converted.allowance_private_medical,
-                     c.allowance_family_cover, encryptAmount(total_compensation)]
+                     c.allowance_family_cover, encryptAmount(total_compensation), encryptLocalValues(local_values)]
                 );
             }
         } catch {
@@ -614,10 +616,32 @@ async function convertCompToEur<T extends Partial<CompAmountFields>>(input: T, c
     const converted = { ...input };
     for (const key of COMP_AMOUNT_KEYS) {
         if (key in converted && converted[key as keyof T] != null) {
-            (converted as any)[key] = Math.round((converted[key as keyof T] as number) * rate);
+            // Rounding to a whole EUR here (instead of to the cent) throws
+            // away up to 0.5 EUR per field - for a currency far from 1:1
+            // with EUR (DKK is ~7.45:1), that's several kr of drift per
+            // field, which then compounds once every field is summed into
+            // total_compensation and converted back for display. Two
+            // decimal places matches the precision used everywhere else
+            // amounts are converted (see toLocalAmount in @/lib/format).
+            (converted as any)[key] = Math.round((converted[key as keyof T] as number) * rate * 100) / 100;
         }
     }
     return { converted, fxRateUsed: rate };
+}
+
+// The figures exactly as typed (pre-conversion `input`, not `converted`),
+// kept verbatim so "Local" display never has to be reverse-engineered from
+// the EUR columns again (see toDraft in compensation-benefits-card.tsx and
+// localDisplay in @/lib/format). NULL for a EUR record - the EUR columns
+// already are the local figures, nothing extra to store.
+function buildLocalValues<T extends Partial<CompAmountFields>>(input: T, currency: string): Record<string, number | null> | null {
+    if (currency === "EUR") return null;
+    const out: Record<string, number | null> = {};
+    for (const key of COMP_AMOUNT_KEYS) {
+        if (key in input) out[key] = (input[key as keyof T] as number | null | undefined) ?? null;
+    }
+    out.total_compensation = totalCompensationOf(input);
+    return out;
 }
 
 export async function updateEmployeeCompensation(employeeId: number, input: CompensationInput): Promise<{ ok: boolean; error?: string }> {
@@ -626,13 +650,14 @@ export async function updateEmployeeCompensation(employeeId: number, input: Comp
     const { converted, fxRateUsed, error } = await convertCompToEur(input, currency);
     if (error) return { ok: false, error };
     const total_compensation = totalCompensationOf(converted);
+    const local_values = buildLocalValues(input, currency);
     try {
         await query(
             `insert into employee_compensation
                 (employee_id, currency, fx_rate_used, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
                  allowance_company_car, allowance_mobility, allowance_home_office, allowance_private_medical,
-                 allowance_family_cover, total_compensation, updated_at)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, CURRENT_TIMESTAMP)
+                 allowance_family_cover, total_compensation, local_values, updated_at)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, CURRENT_TIMESTAMP)
              on conflict (employee_id) do update set
                 currency = excluded.currency,
                 fx_rate_used = excluded.fx_rate_used,
@@ -648,10 +673,11 @@ export async function updateEmployeeCompensation(employeeId: number, input: Comp
                 allowance_private_medical = excluded.allowance_private_medical,
                 allowance_family_cover = excluded.allowance_family_cover,
                 total_compensation = excluded.total_compensation,
+                local_values = excluded.local_values,
                 updated_at = excluded.updated_at`,
             [employeeId, currency, fxRateUsed, encryptAmount(converted.base_salary), encryptAmount(converted.sti_target), encryptAmount(converted.sti_max), encryptAmount(converted.lti_target), encryptAmount(converted.lti_max),
              encryptAmount(converted.other_bonus), converted.allowance_company_car, converted.allowance_mobility, converted.allowance_home_office,
-             converted.allowance_private_medical, converted.allowance_family_cover, encryptAmount(total_compensation)]
+             converted.allowance_private_medical, converted.allowance_family_cover, encryptAmount(total_compensation), encryptLocalValues(local_values)]
         );
     } catch (err: any) {
         return { ok: false, error: err.message };

@@ -28,7 +28,7 @@ import { EmployeeDocumentsCard } from "@/components/employee-documents-card";
 import { listEmployeeDocuments } from "@/app/actions/employee-documents";
 import { listFolders } from "@/app/actions/document-folders";
 import { ProfileActions } from "./profile-actions";
-import { formatDate, formatYears, yearsBetween, toLocalAmount } from "@/lib/format";
+import { formatDate, formatYears, yearsBetween, localDisplay } from "@/lib/format";
 import { Money } from "@/components/comp-visibility";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canSeeComp, canSeePersonal } from "@/lib/permissions";
@@ -69,7 +69,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
     // Shown in whatever currency this person's compensation was entered in by
     // default - matches the Compensation & Benefits card right below, which
     // has its own Local/EUR toggle for the full breakdown.
-    const totalComp = toLocalAmount(emp.total_compensation, emp.currency, emp.fx_rate_used);
+    const totalComp = localDisplay(emp.local_total_compensation, emp.total_compensation, emp.currency, emp.fx_rate_used);
     const stats = [
         { icon: Euro, label: "Total Compensation", value: <Money value={totalComp.value} currency={totalComp.currency} />, sub: "Total Annual Comp" },
         { icon: CalendarDays, label: "Years of Service", value: formatYears(emp.hire_date), sub: `Since ${formatDate(emp.hire_date)}` },

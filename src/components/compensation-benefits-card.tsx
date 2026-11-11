@@ -53,22 +53,26 @@ const DISPLAY_FIELDS: { key: DualKey | MoneyKey | "base_salary"; label: string; 
 type DualFieldDraft = { pct: number | ""; amount: number | ""; mode: MoneyMode };
 type Draft = { currency: string; base_salary: number | "" } & Record<DualKey, DualFieldDraft> & Record<MoneyKey, number | "">;
 
-// Every stored amount is always the EUR-equivalent, regardless of what
-// currency this card was entered in (see employee-crud.ts) - re-opening it
-// for edit converts those back to the ORIGINAL local-currency figures using
-// the rate frozen at save time (fx_rate_used), not today's rate, so this
-// shows back exactly what was typed, never a value that's drifted since.
+// A non-EUR record stores the figures exactly as typed in local_values (see
+// employee-crud.ts) - re-opening it for edit reads those straight back, no
+// conversion involved, so it can never drift no matter how many times the
+// record gets resaved (or how the EUR equivalent changes underneath it).
+// local_values is only null for records saved before this existed, or saved
+// in EUR to begin with - for those, fall back to back-converting the stored
+// EUR figure via the rate frozen at that save (the old behavior).
 function toDraft(c: Compensation | null): Draft {
+    const lv = c?.local_values;
     const rate = c && c.currency !== "EUR" && c.fx_rate_used ? c.fx_rate_used : null;
-    const back = (v: number | null): number | "" => {
+    const back = (key: string, v: number | null): number | "" => {
+        if (lv && lv[key] != null) return lv[key] as number;
         if (v == null) return "";
         return rate ? Math.round((v / rate) * 100) / 100 : v;
     };
-    const base = back((c?.base_salary as number | null) ?? null);
+    const base = back("base_salary", (c?.base_salary as number | null) ?? null);
     const baseNum = Number(base) || 0;
     const dual = {} as Record<DualKey, DualFieldDraft>;
     DUAL_KEYS.forEach((k) => {
-        const amt = back((c?.[k] as number | null) ?? null);
+        const amt = back(k, (c?.[k] as number | null) ?? null);
         // Rounded to 2dp, not a whole number - rounding to a whole % (e.g.
         // 60,000/170,000 -> "35%") and then recomputing € from that on save
         // silently turned 60,000 into 59,500 even when the person never
@@ -79,7 +83,7 @@ function toDraft(c: Compensation | null): Draft {
         dual[k] = { pct, amount: amt, mode: "pct" };
     });
     const money = {} as Record<MoneyKey, number | "">;
-    MONEY_FIELDS.forEach((f) => { money[f.key] = back((c?.[f.key] as number | null) ?? null); });
+    MONEY_FIELDS.forEach((f) => { money[f.key] = back(f.key, (c?.[f.key] as number | null) ?? null); });
     return { currency: c?.currency || "EUR", base_salary: base, ...dual, ...money };
 }
 
@@ -165,15 +169,22 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
         if (amt == null || !c?.base_salary) return null;
         return `${((amt / c.base_salary) * 100).toFixed(1)}%`;
     };
-    const rows: [string, number | null | undefined, string | null][] = [
-        ["Compensation (Total)", totalCompensation, null],
-        ...DISPLAY_FIELDS.map((f) => [f.label, c?.[f.key as keyof Compensation] as number | null | undefined, f.isDual ? pctOfBase(c?.[f.key as keyof Compensation] as number | null) : null] as [string, number | null | undefined, string | null]),
+    const rows: [string, string, number | null | undefined, string | null][] = [
+        ["Compensation (Total)", "total_compensation", totalCompensation, null],
+        ...DISPLAY_FIELDS.map((f) => [f.label, f.key, c?.[f.key as keyof Compensation] as number | null | undefined, f.isDual ? pctOfBase(c?.[f.key as keyof Compensation] as number | null) : null] as [string, string, number | null | undefined, string | null]),
     ];
     // This card shows every figure in whatever currency the record was
     // entered in by default ("local") - every field here shares the same
-    // currency/fx_rate_used since it's all one record - with a toggle to
-    // force everything to EUR instead.
-    const conv = (v: number | null | undefined) => (mode === "eur" ? { value: v ?? null, currency: "EUR" } : toLocalAmount(v, c?.currency, c?.fx_rate_used));
+    // currency since it's all one record - with a toggle to force everything
+    // to EUR instead. A non-EUR record's local_values holds the exact
+    // figures as typed (see toDraft above); only a legacy record saved
+    // before that existed falls back to back-converting the stored EUR via
+    // the frozen rate.
+    const conv = (v: number | null | undefined, key: string) => {
+        if (mode === "eur") return { value: v ?? null, currency: "EUR" };
+        if (c?.local_values && c.local_values[key] != null) return { value: c.local_values[key], currency: c.currency };
+        return toLocalAmount(v, c?.currency, c?.fx_rate_used);
+    };
     const otherBenefitVis = useCompVisibility();
 
     return (
@@ -191,8 +202,8 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
             </div>
             <table className="w-full text-[12.5px]">
                 <tbody className="divide-y divide-slate-100">
-                    {rows.map(([k, v, pct]) => {
-                        const { value, currency } = conv(v);
+                    {rows.map(([k, fieldKey, v, pct]) => {
+                        const { value, currency } = conv(v, fieldKey);
                         return (
                         <tr key={k}>
                             <td className="px-3.5 py-2 text-slate-500">

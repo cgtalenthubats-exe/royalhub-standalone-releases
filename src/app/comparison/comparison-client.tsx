@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { formatCurrency, formatDate, formatYears, gradeColor, compensationOnly, yearsBetween, toLocalAmount } from "@/lib/format";
+import { formatCurrency, formatDate, formatYears, gradeColor, compensationOnly, yearsBetween, localDisplay } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Trophy, Clock, CalendarPlus, Users, Download, X, Plus, Printer, FileDown, Loader2 } from "lucide-react";
 import { buildComparisonHtml } from "./export-html";
@@ -32,8 +32,10 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
     // side isn't meaningful. Exports (PDF/HTML/PPTX) always render EUR too,
     // for audit consistency (see export-html.ts / pptx-export.ts, untouched).
     const [mode, setMode] = useState<MoneyDisplayMode>("local");
-    const fmtFor = (d: EmployeeDetail) => (v: number | null | undefined) => {
-        const conv = mode === "eur" ? { value: v ?? null, currency: "EUR" } : toLocalAmount(v, d.compensation?.currency ?? d.currency, d.compensation?.fx_rate_used ?? d.fx_rate_used);
+    const fmtFor = (d: EmployeeDetail) => (v: number | null | undefined, localValue?: number | null) => {
+        const currency = d.compensation?.currency ?? d.currency;
+        const fxRateUsed = d.compensation?.fx_rate_used ?? d.fx_rate_used;
+        const conv = mode === "eur" ? { value: v ?? null, currency: "EUR" } : localDisplay(localValue, v, currency, fxRateUsed);
         return formatCurrency(conv.value, conv.currency);
     };
 
@@ -257,17 +259,17 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                         details={allDetails}
                         headerRight={<LocalEurToggle mode={mode} onChange={setMode} dark />}
                         rows={[
-                            ["Total Compensation", (d) => fmtFor(d)(d.total_compensation)],
-                            ["Base / Salary", (d) => fmtFor(d)(d.compensation?.base_salary)],
-                            ["STI Target", (d) => fmtFor(d)(d.compensation?.sti_target)],
-                            ["LTI Target", (d) => fmtFor(d)(d.compensation?.lti_target)],
-                            ["STI Max", (d) => fmtFor(d)(d.compensation?.sti_max)],
-                            ["LTI Max", (d) => fmtFor(d)(d.compensation?.lti_max)],
-                            ["Other Bonus", (d) => fmtFor(d)(d.compensation?.other_bonus)],
-                            ["Allowance · Car", (d) => fmtFor(d)(d.compensation?.allowance_company_car)],
-                            ["Allowance · Mobile", (d) => fmtFor(d)(d.compensation?.allowance_mobility)],
-                            ["Allowance · Housing", (d) => fmtFor(d)(d.compensation?.allowance_home_office)],
-                            ["Benefit · Medical", (d) => fmtFor(d)(d.compensation?.allowance_private_medical)],
+                            ["Total Compensation", (d) => fmtFor(d)(d.total_compensation, d.local_total_compensation)],
+                            ["Base / Salary", (d) => fmtFor(d)(d.compensation?.base_salary, d.compensation?.local_values?.base_salary)],
+                            ["STI Target", (d) => fmtFor(d)(d.compensation?.sti_target, d.compensation?.local_values?.sti_target)],
+                            ["LTI Target", (d) => fmtFor(d)(d.compensation?.lti_target, d.compensation?.local_values?.lti_target)],
+                            ["STI Max", (d) => fmtFor(d)(d.compensation?.sti_max, d.compensation?.local_values?.sti_max)],
+                            ["LTI Max", (d) => fmtFor(d)(d.compensation?.lti_max, d.compensation?.local_values?.lti_max)],
+                            ["Other Bonus", (d) => fmtFor(d)(d.compensation?.other_bonus, d.compensation?.local_values?.other_bonus)],
+                            ["Allowance · Car", (d) => fmtFor(d)(d.compensation?.allowance_company_car, d.compensation?.local_values?.allowance_company_car)],
+                            ["Allowance · Mobile", (d) => fmtFor(d)(d.compensation?.allowance_mobility, d.compensation?.local_values?.allowance_mobility)],
+                            ["Allowance · Housing", (d) => fmtFor(d)(d.compensation?.allowance_home_office, d.compensation?.local_values?.allowance_home_office)],
+                            ["Benefit · Medical", (d) => fmtFor(d)(d.compensation?.allowance_private_medical, d.compensation?.local_values?.allowance_private_medical)],
                             ["Other benefit (please specify)", (d) => d.compensation?.allowance_family_cover || "—"],
                         ]}
                     />

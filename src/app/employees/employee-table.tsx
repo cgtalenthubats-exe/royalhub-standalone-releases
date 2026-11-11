@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EmployeeListItem } from "@/app/actions/employees";
 import { deleteEmployees } from "@/app/actions/employee-crud";
-import { formatCurrency, gradeColor, toLocalAmount } from "@/lib/format";
+import { formatCurrency, gradeColor, localDisplay } from "@/lib/format";
 import { EmployeeAvatar } from "@/components/employee-avatar";
 import { Money } from "@/components/comp-visibility";
 import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
@@ -179,7 +179,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                                 const active = e.status === "Active";
                                 const comp = compMode === "eur"
                                     ? { value: e.total_compensation, currency: "EUR" }
-                                    : toLocalAmount(e.total_compensation, e.currency, e.fx_rate_used);
+                                    : localDisplay(e.local_total_compensation, e.total_compensation, e.currency, e.fx_rate_used);
                                 return (
                                     <div
                                         key={e.employee_id}

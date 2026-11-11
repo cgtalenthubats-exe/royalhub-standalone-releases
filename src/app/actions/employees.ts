@@ -23,6 +23,12 @@ export interface Compensation {
     /** Free text ("Other benefit — please specify"), not a euro amount — see migration 023. */
     allowance_family_cover: string | null;
     total_compensation: number | null;
+    // The figures exactly as typed, in `currency` above, keyed by the same
+    // field names as this interface (plus total_compensation) - null when
+    // currency is EUR (nothing to store, EUR fields already are the local
+    // figures) or for a record saved before this existed. See
+    // local_values in employee-crud.ts's convertCompToEur call sites.
+    local_values: Record<string, number | null> | null;
 }
 
 export interface PerformanceGrade {
@@ -65,9 +71,14 @@ export interface EmployeeListItem extends EmployeeRow {
     other_bonus: number | null;
     // The currency this person's compensation was entered in, and the rate
     // frozen at save time - lets a list/table show each row in its own
-    // "local" currency by default (see toLocalAmount in @/lib/format).
+    // "local" currency by default (see localDisplay in @/lib/format).
     currency: string;
     fx_rate_used: number | null;
+    // Total compensation exactly as typed (in `currency` above) - null when
+    // currency is EUR or for a record saved before this existed, in which
+    // case the Local/EUR toggle falls back to back-converting the EUR total
+    // (see toLocalAmount in @/lib/format).
+    local_total_compensation: number | null;
     latest_grade: string | null;
     team_size: number;
 }
@@ -221,6 +232,7 @@ export async function listEmployees(): Promise<EmployeeListItem[]> {
             other_bonus: c?.other_bonus ?? null,
             currency: c?.currency || "EUR",
             fx_rate_used: c?.fx_rate_used ?? null,
+            local_total_compensation: c?.local_values?.total_compensation ?? null,
             latest_grade: latestGrade.get(e.employee_id)?.grade ?? null,
             team_size: positionId != null ? teams.get(positionId) || 0 : 0,
         };
@@ -389,6 +401,7 @@ export async function getEmployee(id: number): Promise<EmployeeDetail | null> {
         other_bonus: decryptedComp?.other_bonus ?? null,
         currency: decryptedComp?.currency || "EUR",
         fx_rate_used: decryptedComp?.fx_rate_used ?? null,
+        local_total_compensation: decryptedComp?.local_values?.total_compensation ?? null,
         latest_grade: (perf && perf.length) ? perf[perf.length - 1].grade : null,
         team_size: subjectPositionId != null ? teams.get(subjectPositionId) || 0 : 0,
         compensation: decryptedComp ?? null,
