@@ -130,6 +130,7 @@ export async function createEmployee(input: NewEmployeeInput): Promise<{ ok: boo
 // created in one call instead of a bare-minimum row that gets filled in
 // piecemeal later via each profile card's own edit dialog.
 export interface NewEmployeeCompensationInput {
+    currency: string;
     base_salary: number | null;
     sti_target: number | null;
     sti_max: number | null;
@@ -160,6 +161,12 @@ export interface NewEmployeeFullInput {
     name: string;
     office_id: number;
     position_id: number;
+    // Where this person actually sits - independent of which company/office
+    // they're assigned to (see personal-employment-card.tsx). Left blank
+    // rather than silently inferred from the office, same reasoning as why
+    // nationality is never auto-filled from it either.
+    country?: string | null;
+    city?: string | null;
     date_of_birth?: string | null;
     gender?: string | null;
     nationality?: string | null;
@@ -179,7 +186,7 @@ export async function createEmployeeFull(input: NewEmployeeFullInput): Promise<{
     if (!input.office_id) return { ok: false, error: "Company / office is required" };
     if (!input.position_id) return { ok: false, error: "Position is required" };
 
-    const { banner_id, country, city, position_title, function_id } = await resolveOfficePosition(input.office_id, input.position_id);
+    const { banner_id, position_title, function_id } = await resolveOfficePosition(input.office_id, input.position_id);
     let employeeId: number;
     try {
         const created = await queryOne<{ employee_id: number }>(
@@ -188,7 +195,8 @@ export async function createEmployeeFull(input: NewEmployeeFullInput): Promise<{
                  gender, job_grade, date_of_birth, hire_date, position_effective_date, status, readiness_potential)
              values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) returning employee_id`,
             [
-                input.name.trim(), banner_id, input.office_id, input.position_id, position_title, function_id, country, city,
+                input.name.trim(), banner_id, input.office_id, input.position_id, position_title, function_id,
+                input.country?.trim() || null, input.city?.trim() || null,
                 input.nationality?.trim() || null, input.gender || null, input.job_grade?.trim() || null,
                 input.date_of_birth || null, input.hire_date || null, input.position_effective_date || input.hire_date || null,
                 input.status || "Active", input.readiness_potential || null,
@@ -202,20 +210,29 @@ export async function createEmployeeFull(input: NewEmployeeFullInput): Promise<{
     }
 
     const c = input.compensation;
-    if (c && Object.values(c).some((v) => v != null)) {
+    const hasCompData = c && Object.entries(c).some(([k, v]) => k !== "currency" && v != null);
+    if (c && hasCompData) {
         try {
             await requireCompEditor();
-            const total_compensation = totalCompensationOf(c);
-            await query(
-                `insert into employee_compensation
-                    (employee_id, currency, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
-                     allowance_company_car, allowance_mobility, allowance_home_office, allowance_private_medical,
-                     allowance_family_cover, total_compensation)
-                 values ($1,'EUR',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-                [employeeId, encryptAmount(c.base_salary), encryptAmount(c.sti_target), encryptAmount(c.sti_max), encryptAmount(c.lti_target), encryptAmount(c.lti_max), encryptAmount(c.other_bonus),
-                 c.allowance_company_car, c.allowance_mobility, c.allowance_home_office, c.allowance_private_medical,
-                 c.allowance_family_cover, encryptAmount(total_compensation)]
-            );
+            const currency = c.currency || "EUR";
+            const { converted, fxRateUsed, error } = await convertCompToEur(c, currency);
+            // Missing-rate behaves the same as a permission failure below -
+            // the employee row still gets created; compensation just doesn't
+            // get saved and can be filled in afterward from the profile page
+            // once a rate is set in Settings > Currency.
+            if (!error) {
+                const total_compensation = totalCompensationOf(converted);
+                await query(
+                    `insert into employee_compensation
+                        (employee_id, currency, fx_rate_used, base_salary, sti_target, sti_max, lti_target, lti_max, other_bonus,
+                         allowance_company_car, allowance_mobility, allowance_home_office, allowance_private_medical,
+                         allowance_family_cover, total_compensation)
+                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+                    [employeeId, currency, fxRateUsed, encryptAmount(converted.base_salary), encryptAmount(converted.sti_target), encryptAmount(converted.sti_max), encryptAmount(converted.lti_target), encryptAmount(converted.lti_max), encryptAmount(converted.other_bonus),
+                     converted.allowance_company_car, converted.allowance_mobility, converted.allowance_home_office, converted.allowance_private_medical,
+                     c.allowance_family_cover, encryptAmount(total_compensation)]
+                );
+            }
         } catch {
             // not authorized to enter compensation (matches updateEmployeeCompensation's
             // guard) — the employee row itself still gets created either way

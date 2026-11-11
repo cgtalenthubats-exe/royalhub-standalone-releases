@@ -49,6 +49,8 @@ const NULLED_LIST = {
     sti_target: null,
     lti_target: null,
     other_bonus: null,
+    currency: "EUR",
+    fx_rate_used: null,
 } as const;
 
 export function redactListItem(e: EmployeeListItem, seeComp: boolean, seePersonal: boolean): EmployeeListItem {

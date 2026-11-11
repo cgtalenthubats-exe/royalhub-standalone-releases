@@ -8,13 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { formatCurrency, formatDate, formatYears, gradeColor, compensationOnly, yearsBetween } from "@/lib/format";
+import { formatCurrency, formatDate, formatYears, gradeColor, compensationOnly, yearsBetween, toLocalAmount } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Trophy, Clock, CalendarPlus, Users, Download, X, Plus, Printer, FileDown, Loader2 } from "lucide-react";
 import { buildComparisonHtml } from "./export-html";
 import { exportComparisonPptx } from "@/lib/pptx-export";
 import { EmployeeAvatar } from "@/components/employee-avatar";
-import { useCurrencyDisplay } from "@/components/currency-display";
+import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
 
 const MAX = 5;
 
@@ -24,11 +24,18 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
     const [simulated, setSimulated] = useState<EmployeeDetail[]>([]);
     const [loading, setLoading] = useState(false);
     const [compOnly, setCompOnly] = useState(false);
-    const { convert, displayCurrency } = useCurrencyDisplay();
-    // On-screen only - exports (PDF/HTML/PPTX) always render the raw EUR
-    // figures for audit consistency, regardless of the viewer's display
-    // currency (see export-html.ts / pptx-export.ts, untouched by this).
-    const fmt = (v: number | null | undefined) => formatCurrency(v == null ? v : convert(v), displayCurrency);
+    // The per-field comparison table shows each person in their OWN entered
+    // currency by default ("local") - toggled to EUR for a true
+    // apples-to-apples read. Aggregates that compare magnitude across people
+    // (the "Highest Total Comp" badge, the bar chart) always use EUR
+    // regardless of this toggle - averaging/ranking mixed currencies side by
+    // side isn't meaningful. Exports (PDF/HTML/PPTX) always render EUR too,
+    // for audit consistency (see export-html.ts / pptx-export.ts, untouched).
+    const [mode, setMode] = useState<MoneyDisplayMode>("local");
+    const fmtFor = (d: EmployeeDetail) => (v: number | null | undefined) => {
+        const conv = mode === "eur" ? { value: v ?? null, currency: "EUR" } : toLocalAmount(v, d.compensation?.currency ?? d.currency, d.compensation?.fx_rate_used ?? d.fx_rate_used);
+        return formatCurrency(conv.value, conv.currency);
+    };
 
     // what-if: base employee + new total/base → adds a simulated "(adjusted)" column
     const [simBase, setSimBase] = useState<number | "">("");
@@ -73,9 +80,9 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
 
     const badges = useMemo(() => computeBadges(allDetails), [allDetails]);
     const chartData = useMemo(
-        () => allDetails.map((d) => ({ name: d.name.includes("(adjusted)") ? d.name.replace(" (adjusted)", "*") : d.name.split(" ")[0], value: convert(compOnly ? compensationOnly(d.compensation) : (d.total_compensation || 0)), id: d.employee_id }))
+        () => allDetails.map((d) => ({ name: d.name.includes("(adjusted)") ? d.name.replace(" (adjusted)", "*") : d.name.split(" ")[0], value: compOnly ? compensationOnly(d.compensation) : (d.total_compensation || 0), id: d.employee_id }))
             .sort((a, b) => b.value - a.value),
-        [allDetails, compOnly, convert]
+        [allDetails, compOnly]
     );
 
     function exportHtml() {
@@ -202,7 +209,7 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
 
                     {/* Summary badges */}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <BadgeCard icon={Trophy} label="Highest Total Comp" name={badges.highestComp?.name} value={fmt(badges.highestComp?.total_compensation)} />
+                        <BadgeCard icon={Trophy} label="Highest Total Comp (EUR)" name={badges.highestComp?.name} value={formatCurrency(badges.highestComp?.total_compensation, "EUR")} />
                         <BadgeCard icon={Clock} label="Longest Tenure" name={badges.longestTenure?.name} value={formatYears(badges.longestTenure?.hire_date)} />
                         <BadgeCard icon={CalendarPlus} label="Newest in Role" name={badges.newestRole?.name} value={formatYears(badges.newestRole?.position_effective_date)} />
                         <BadgeCard icon={Users} label="Largest Team" name={badges.largestTeam?.name} value={`${badges.largestTeam?.team_size ?? 0} reports`} />
@@ -211,7 +218,7 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                     {/* Compensation bar chart */}
                     <Card className="overflow-hidden">
                         <div className="flex items-center justify-between border-b bg-[#0b1f3a] px-4 py-2.5 text-sm font-semibold text-white">
-                            <span>Compensation Comparison (high → low)</span>
+                            <span>Compensation Comparison (EUR, high → low)</span>
                             <label className="flex items-center gap-2 text-xs font-normal">
                                 <input type="checkbox" checked={compOnly} onChange={(e) => setCompOnly(e.target.checked)} />
                                 Compensation only (excl. benefits)
@@ -222,7 +229,7 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                                 <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 10 }}>
                                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                                     <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}K`} tick={{ fontSize: 11 }} />
-                                    <Tooltip formatter={(v: any) => fmt(Number(v))} />
+                                    <Tooltip formatter={(v: any) => formatCurrency(Number(v), "EUR")} />
                                     <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                                         {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? "#0b1f3a" : "#3b6ea5"} />)}
                                     </Bar>
@@ -244,20 +251,26 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                         ["Status", (d) => d.status],
                     ]} />
 
-                    <CompareTable title="Compensation & Benefits" mono details={allDetails} rows={[
-                        ["Total Compensation", (d) => fmt(d.total_compensation)],
-                        ["Base / Salary", (d) => fmt(d.compensation?.base_salary)],
-                        ["STI Target", (d) => fmt(d.compensation?.sti_target)],
-                        ["LTI Target", (d) => fmt(d.compensation?.lti_target)],
-                        ["STI Max", (d) => fmt(d.compensation?.sti_max)],
-                        ["LTI Max", (d) => fmt(d.compensation?.lti_max)],
-                        ["Other Bonus", (d) => fmt(d.compensation?.other_bonus)],
-                        ["Allowance · Car", (d) => fmt(d.compensation?.allowance_company_car)],
-                        ["Allowance · Mobile", (d) => fmt(d.compensation?.allowance_mobility)],
-                        ["Allowance · Housing", (d) => fmt(d.compensation?.allowance_home_office)],
-                        ["Benefit · Medical", (d) => fmt(d.compensation?.allowance_private_medical)],
-                        ["Other benefit (please specify)", (d) => d.compensation?.allowance_family_cover || "—"],
-                    ]} />
+                    <CompareTable
+                        title="Compensation & Benefits"
+                        mono
+                        details={allDetails}
+                        headerRight={<LocalEurToggle mode={mode} onChange={setMode} dark />}
+                        rows={[
+                            ["Total Compensation", (d) => fmtFor(d)(d.total_compensation)],
+                            ["Base / Salary", (d) => fmtFor(d)(d.compensation?.base_salary)],
+                            ["STI Target", (d) => fmtFor(d)(d.compensation?.sti_target)],
+                            ["LTI Target", (d) => fmtFor(d)(d.compensation?.lti_target)],
+                            ["STI Max", (d) => fmtFor(d)(d.compensation?.sti_max)],
+                            ["LTI Max", (d) => fmtFor(d)(d.compensation?.lti_max)],
+                            ["Other Bonus", (d) => fmtFor(d)(d.compensation?.other_bonus)],
+                            ["Allowance · Car", (d) => fmtFor(d)(d.compensation?.allowance_company_car)],
+                            ["Allowance · Mobile", (d) => fmtFor(d)(d.compensation?.allowance_mobility)],
+                            ["Allowance · Housing", (d) => fmtFor(d)(d.compensation?.allowance_home_office)],
+                            ["Benefit · Medical", (d) => fmtFor(d)(d.compensation?.allowance_private_medical)],
+                            ["Other benefit (please specify)", (d) => d.compensation?.allowance_family_cover || "—"],
+                        ]}
+                    />
 
                     {/* Performance 5y */}
                     <Card className="overflow-hidden">
@@ -304,13 +317,17 @@ function BadgeCard({ icon: Icon, label, name, value }: { icon: any; label: strin
     );
 }
 
-function CompareTable({ title, details, rows, mono }: {
+function CompareTable({ title, details, rows, mono, headerRight }: {
     title: string; details: EmployeeDetail[]; mono?: boolean;
     rows: [string, (d: EmployeeDetail) => string][];
+    headerRight?: React.ReactNode;
 }) {
     return (
         <Card className="overflow-hidden">
-            <div className="border-b bg-[#0b1f3a] px-4 py-2.5 text-sm font-semibold text-white">{title}</div>
+            <div className="flex items-center justify-between border-b bg-[#0b1f3a] px-4 py-2.5 text-sm font-semibold text-white">
+                <span>{title}</span>
+                {headerRight}
+            </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead><tr className="border-b bg-slate-50">

@@ -4,10 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EmployeeListItem } from "@/app/actions/employees";
 import { deleteEmployees } from "@/app/actions/employee-crud";
-import { formatCurrency, gradeColor } from "@/lib/format";
+import { formatCurrency, gradeColor, toLocalAmount } from "@/lib/format";
 import { EmployeeAvatar } from "@/components/employee-avatar";
 import { Money } from "@/components/comp-visibility";
-import { useCurrencyDisplay } from "@/components/currency-display";
+import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Search, ChevronDown, Users, UserCheck, UserX, Euro, Trash2, Loader2, X } from "lucide-react";
@@ -27,7 +27,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
     employees: EmployeeListItem[]; initialQuery?: string; initialCompany?: string; initialCountry?: string; initialFunction?: string;
 }) {
     const router = useRouter();
-    const { displayCurrency, convert } = useCurrencyDisplay();
+    const [compMode, setCompMode] = useState<MoneyDisplayMode>("local");
     const [q, setQ] = useState(initialQuery || "");
     const [banner, setBanner] = useState(initialCompany || "");
     const [country, setCountry] = useState(initialCountry || "");
@@ -109,7 +109,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                 <StatCard icon={Users} iconBg="bg-[#eff6ff]" iconColor="#2563eb" label={hasFilter ? "Showing" : "Total"} value={kpi.shown} sub={hasFilter ? `of ${employees.length} total` : "employees"} />
                 <StatCard icon={UserCheck} iconBg="bg-[#f0fdf4]" iconColor="#16a34a" label="Active" value={kpi.activeCount} sub={kpi.shown ? `${Math.round((kpi.activeCount / kpi.shown) * 100)}% of shown` : "—"} />
                 <StatCard icon={UserX} iconBg="bg-[#f8fafc]" iconColor="#64748b" label="Resigned" value={kpi.resignedCount} sub={hasFilter ? "in current filter" : "this year"} />
-                <StatCard icon={Euro} iconBg="bg-[#fffbeb]" iconColor="#d97706" label="Avg Total Comp" value={kpi.avgComp > 0 ? formatCurrency(convert(kpi.avgComp), displayCurrency) : "—"} sub={hasFilter ? "filtered average" : "across all"} />
+                <StatCard icon={Euro} iconBg="bg-[#fffbeb]" iconColor="#d97706" label="Avg Total Comp (EUR)" value={kpi.avgComp > 0 ? formatCurrency(kpi.avgComp, "EUR") : "—"} sub={hasFilter ? "filtered average" : "across all"} />
             </div>
 
             {/* Bulk-selection bar - only shown once something's checked, replaces nothing else */}
@@ -142,6 +142,10 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                 <FilterSelect value={country} onChange={setCountry} placeholder="All Countries" options={countries} />
                 <FilterSelect value={func} onChange={setFunc} placeholder="All Functions" options={funcs} />
                 <FilterSelect value={status} onChange={setStatus} placeholder="Status" options={["Active", "Resigned"]} />
+                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-[9px] px-2.5 py-[7px]">
+                    <span className="text-[11px] font-semibold text-slate-500">Total Comp</span>
+                    <LocalEurToggle mode={compMode} onChange={setCompMode} />
+                </div>
             </div>
 
             {/* Table card */}
@@ -164,7 +168,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                             <div>Position</div>
                             <div>Banner</div>
                             <div>Grade</div>
-                            <div>Total Comp</div>
+                            <div>Total Comp · {compMode === "local" ? "Local" : "EUR"}</div>
                             <div>FY25</div>
                             <div>Team / Status</div>
                         </div>
@@ -173,6 +177,9 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                         <div className="divide-y divide-slate-100">
                             {filtered.map((e) => {
                                 const active = e.status === "Active";
+                                const comp = compMode === "eur"
+                                    ? { value: e.total_compensation, currency: "EUR" }
+                                    : toLocalAmount(e.total_compensation, e.currency, e.fx_rate_used);
                                 return (
                                     <div
                                         key={e.employee_id}
@@ -204,7 +211,7 @@ export function EmployeeTable({ employees, initialQuery, initialCompany, initial
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="font-bold text-[#0f172a] tabular-nums"><Money value={e.total_compensation} /></div>
+                                        <div className="font-bold text-[#0f172a] tabular-nums"><Money value={comp.value} currency={comp.currency} /></div>
                                         <div>
                                             {e.latest_grade ? (
                                                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${gradeColor(e.latest_grade)}`}>

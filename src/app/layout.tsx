@@ -8,8 +8,7 @@ import { listBanners } from "@/app/actions/org";
 import { listCurrencyRates } from "@/app/actions/currency";
 import { effectiveCompVisibility } from "@/lib/permissions";
 import { CompVisibilityProvider } from "@/components/comp-visibility";
-import { CurrencyDisplayProvider } from "@/components/currency-display";
-import { CurrencySwitcher } from "@/components/currency-switcher";
+import { CurrencyRatesProvider } from "@/components/currency-display";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -34,7 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <html lang="en" className={jakarta.variable}>
             <body className="min-h-dvh lg:h-screen lg:overflow-hidden bg-[#f1f5f9] font-sans antialiased">
                 <UnsavedChangesProvider>
-                    <CurrencyDisplayProvider rates={rateMap}>
+                    <CurrencyRatesProvider rates={rateMap}>
                         <div className="flex min-h-dvh lg:h-full flex-col lg:flex-row">
                             {user && <Sidebar user={user} banners={banners} />}
                             <main className="flex-1 min-h-0 lg:overflow-y-auto">
@@ -43,8 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                                 </CompVisibilityProvider>
                             </main>
                         </div>
-                        {user && <CurrencySwitcher />}
-                    </CurrencyDisplayProvider>
+                    </CurrencyRatesProvider>
                 </UnsavedChangesProvider>
                 <Toaster position="top-right" richColors />
             </body>

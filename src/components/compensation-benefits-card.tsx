@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { CommaNumberInput } from "@/components/ui/comma-number-input";
 import { DualModeMoneyInput, type MoneyMode } from "@/components/ui/dual-mode-money-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, toLocalAmount } from "@/lib/format";
 import { Money, useCompVisibility } from "@/components/comp-visibility";
-import { useCurrencyDisplay } from "@/components/currency-display";
+import { useCurrencyRates } from "@/components/currency-display";
+import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
 import { Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -86,11 +87,12 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
     employeeId: number; compensation: Compensation | null; totalCompensation: number | null; canEdit?: boolean;
 }) {
     const router = useRouter();
-    const { rates } = useCurrencyDisplay();
+    const rates = useCurrencyRates();
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [draft, setDraft] = useState<Draft>(toDraft(compensation));
     const [otherBenefit, setOtherBenefit] = useState(compensation?.allowance_family_cover || "");
+    const [mode, setMode] = useState<MoneyDisplayMode>("local");
 
     function openEdit() { setDraft(toDraft(compensation)); setOtherBenefit(compensation?.allowance_family_cover || ""); setOpen(true); }
 
@@ -156,7 +158,9 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
 
     const c = compensation;
     // Precise (not rounded-to-whole-%) percentage of base salary, for display
-    // next to the € amount on the bonus rows — e.g. "(35.3%)".
+    // next to the € amount on the bonus rows — e.g. "(35.3%)". Computed off
+    // the raw stored EUR figures - the ratio is identical whatever currency
+    // the figures are then shown in, so this is unaffected by `mode` below.
     const pctOfBase = (amt: number | null | undefined): string | null => {
         if (amt == null || !c?.base_salary) return null;
         return `${((amt / c.base_salary) * 100).toFixed(1)}%`;
@@ -165,21 +169,31 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
         ["Compensation (Total)", totalCompensation, null],
         ...DISPLAY_FIELDS.map((f) => [f.label, c?.[f.key as keyof Compensation] as number | null | undefined, f.isDual ? pctOfBase(c?.[f.key as keyof Compensation] as number | null) : null] as [string, number | null | undefined, string | null]),
     ];
+    // This card shows every figure in whatever currency the record was
+    // entered in by default ("local") - every field here shares the same
+    // currency/fx_rate_used since it's all one record - with a toggle to
+    // force everything to EUR instead.
+    const conv = (v: number | null | undefined) => (mode === "eur" ? { value: v ?? null, currency: "EUR" } : toLocalAmount(v, c?.currency, c?.fx_rate_used));
     const otherBenefitVis = useCompVisibility();
 
     return (
         <Card className="overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.04)]">
             <div className="flex items-center justify-between border-b bg-[#0b1f3a] px-4 py-2.5 text-sm font-semibold text-white">
                 <span>Compensation &amp; Benefits</span>
-                {canEdit && (
-                    <Button size="sm" variant="secondary" className="h-7 gap-1.5 text-xs" onClick={openEdit}>
-                        <Pencil className="h-3 w-3" /> Edit
-                    </Button>
-                )}
+                <div className="flex items-center gap-2">
+                    <LocalEurToggle mode={mode} onChange={setMode} dark />
+                    {canEdit && (
+                        <Button size="sm" variant="secondary" className="h-7 gap-1.5 text-xs" onClick={openEdit}>
+                            <Pencil className="h-3 w-3" /> Edit
+                        </Button>
+                    )}
+                </div>
             </div>
             <table className="w-full text-[12.5px]">
                 <tbody className="divide-y divide-slate-100">
-                    {rows.map(([k, v, pct]) => (
+                    {rows.map(([k, v, pct]) => {
+                        const { value, currency } = conv(v);
+                        return (
                         <tr key={k}>
                             <td className="px-3.5 py-2 text-slate-500">
                                 {k}
@@ -189,10 +203,11 @@ export function CompensationBenefitsCard({ employeeId, compensation, totalCompen
                             </td>
                             <td className="px-3.5 py-2 text-right font-mono font-medium text-[#0f172a]">
                                 {pct && <span className="mr-1.5 font-sans text-[10.5px] font-normal text-slate-400">({pct})</span>}
-                                <Money value={v} />
+                                <Money value={value} currency={currency} />
                             </td>
                         </tr>
-                    ))}
+                        );
+                    })}
                     <tr>
                         <td className="px-3.5 py-2 text-slate-500">{OTHER_BENEFIT_LABEL}</td>
                         <td className="px-3.5 py-2 text-right font-medium text-[#0f172a]">

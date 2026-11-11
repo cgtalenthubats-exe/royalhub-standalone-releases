@@ -73,6 +73,23 @@ export function formatCurrency(value: number | null | undefined, currency = "EUR
     return SUFFIX_CURRENCIES.has(currency) ? `${amount} ${symbol}` : `${symbol}${amount}`;
 }
 
+// Every stored compensation amount is always the EUR-equivalent, regardless
+// of what currency it was originally entered in - `currency` + `fx_rate_used`
+// (the rate frozen on the record at save time) are what's needed to show it
+// back in that original, "local" currency. This is the read-only-display
+// counterpart to each card's own toDraft() back-conversion, used wherever a
+// table/card defaults to showing each record in its own entered currency
+// (with an explicit toggle to force everything to EUR instead).
+export function toLocalAmount(
+    eurValue: number | null | undefined,
+    currency: string | null | undefined,
+    fxRateUsed: number | null | undefined
+): { value: number | null; currency: string } {
+    if (eurValue == null) return { value: null, currency: currency || "EUR" };
+    if (!currency || currency === "EUR" || !fxRateUsed) return { value: eurValue, currency: "EUR" };
+    return { value: Math.round((eurValue / fxRateUsed) * 100) / 100, currency };
+}
+
 // Career History dates can be stored at day, month, or year precision (see
 // @/components/precision-date-input) - "2025" and "2025-02" both parse fine
 // as a Date (midnight Jan 1 / Feb 1), so they're matched explicitly before

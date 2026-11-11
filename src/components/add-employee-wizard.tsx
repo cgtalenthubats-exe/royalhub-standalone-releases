@@ -17,6 +17,9 @@ import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { COUNTRIES } from "@/lib/countries";
+import { formatCurrency } from "@/lib/format";
+import { useCurrencyRates } from "@/components/currency-display";
+import { DualModeMoneyInput, type MoneyMode } from "@/components/ui/dual-mode-money-input";
 import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, Camera, FileUp, FileText, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -29,22 +32,57 @@ const STEPS = ["Personal & Employment", "Compensation & Benefits", "Compensation
 const CURRENT_YEAR = new Date().getFullYear();
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// STI/LTI Target and Max support dual %/amount entry (C10), matching the
+// post-creation edit dialog (compensation-benefits-card.tsx) — each carries a
+// {pct, amount, mode} triple instead of one plain percentage.
+type DualFieldDraft = { pct: number | ""; amount: number | ""; mode: MoneyMode };
+function emptyDualField(): DualFieldDraft { return { pct: "", amount: "", mode: "pct" }; }
+type CompDualKey = "sti_target" | "sti_max" | "lti_target" | "lti_max";
+const COMP_DUAL_KEYS: CompDualKey[] = ["sti_target", "sti_max", "lti_target", "lti_max"];
+
 function emptyComp() {
     return {
-        base_salary: "" as number | "", sti_target: "" as number | "", sti_max: "" as number | "",
-        lti_target: "" as number | "", lti_max: "" as number | "", other_bonus: "" as number | "",
+        currency: "EUR",
+        base_salary: "" as number | "",
+        sti_target: emptyDualField(), sti_max: emptyDualField(),
+        lti_target: emptyDualField(), lti_max: emptyDualField(),
+        other_bonus: "" as number | "",
         allowance_company_car: "" as number | "", allowance_mobility: "" as number | "",
         allowance_home_office: "" as number | "", allowance_private_medical: "" as number | "",
         allowance_family_cover: "" as string, // free text ("Other benefit — please specify"), not a euro amount
     };
 }
+// True once anything comp-related has actually been typed — a plain
+// Object.values check no longer works now that STI/LTI Target/Max are
+// {pct, amount, mode} objects (always "truthy") rather than a bare "".
+function compHasAnyValue(c: ReturnType<typeof emptyComp>): boolean {
+    const plainKeys = ["base_salary", "other_bonus", "allowance_company_car", "allowance_mobility", "allowance_home_office", "allowance_private_medical"] as const;
+    if (plainKeys.some((k) => c[k] !== "")) return true;
+    if (c.allowance_family_cover.trim() !== "") return true;
+    return COMP_DUAL_KEYS.some((k) => c[k].pct !== "" || c[k].amount !== "");
+}
+
 function emptyCareerDraft() { return { banner: "", position: "", location: "", start_date: "", end_date: "" }; }
-function emptyCompHistDraft(): CompHistoryInput & { key: number } {
+
+// STI/LTI Eligible and Actual, and Pension, all support dual %/amount entry
+// too, matching compensation-history-card.tsx's edit dialog - each carries a
+// {pct, amount, mode} triple while being drafted here; addCompHistEntry()
+// below flattens this into the plain pct/amount fields CompHistoryInput
+// (and the server) actually expect.
+type HistDualKey = "sti_eligible" | "sti_actual" | "lti_eligible" | "lti_actual" | "pension";
+const HIST_DUAL_KEYS: HistDualKey[] = ["sti_eligible", "sti_actual", "lti_eligible", "lti_actual", "pension"];
+type CompHistDraft = {
+    key: number; fiscal_year: number; effective_date: string | null; currency: string;
+    base_salary: number | null; cash_allowance: number | null; other_bonus: number | null; note: string | null;
+} & Record<HistDualKey, DualFieldDraft>;
+
+function emptyCompHistDraft(): CompHistDraft {
     return {
-        key: Date.now(), fiscal_year: CURRENT_YEAR - 1, effective_date: null, currency: "EUR", base_salary: null, cash_allowance: null,
-        sti_eligible_pct: null, sti_eligible_amount: null, sti_actual_pct: null, sti_amount: null,
-        lti_eligible_pct: null, lti_eligible_amount: null, lti_actual_pct: null, lti_amount: null,
-        pension_contribution: null, pension_pct: null, other_bonus: null, note: null,
+        key: Date.now(), fiscal_year: CURRENT_YEAR - 1, effective_date: null, currency: "EUR",
+        base_salary: null, cash_allowance: null, other_bonus: null, note: null,
+        sti_eligible: emptyDualField(), sti_actual: emptyDualField(),
+        lti_eligible: emptyDualField(), lti_actual: emptyDualField(),
+        pension: { pct: "", amount: "", mode: "amount" },
     };
 }
 function backgroundDraft() { return { title: "", organization: "", detail: "" }; }
@@ -64,9 +102,11 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
 
     const [personal, setPersonal] = useState({
         name: "", date_of_birth: "", gender: "", nationality: "", job_grade: "",
+        country: "", city: "",
         office_id: "", position_id: "", hire_date: "", position_effective_date: "",
         status: "Active", readiness_potential: "Medium", manager_id: "",
     });
+    const rates = useCurrencyRates();
     const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
     // Reports-to candidates for the "real management chain" (banner dimension)
     // — optional at creation time, but offering it here means a new hire can
@@ -124,11 +164,11 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
     const background = [...education, ...certifications, ...experience];
     const hasAnyData = personal.name.trim() !== "" || personal.office_id !== "" || personal.position_id !== ""
         || career.length > 0 || background.length > 0 || compHist.length > 0 || photoFile != null || resumeFile != null
-        || Object.values(comp).some((v) => v !== "");
+        || compHasAnyValue(comp);
 
     function reset() {
         setStep(0);
-        setPersonal({ name: "", date_of_birth: "", gender: "", nationality: "", job_grade: "", office_id: "", position_id: "", hire_date: "", position_effective_date: "", status: "Active", readiness_potential: "Medium", manager_id: "" });
+        setPersonal({ name: "", date_of_birth: "", gender: "", nationality: "", job_grade: "", country: "", city: "", office_id: "", position_id: "", hire_date: "", position_effective_date: "", status: "Active", readiness_potential: "Medium", manager_id: "" });
         setPhotoFile(null);
         setComp(emptyComp());
         setCareer([]); setCareerDraft(emptyCareerDraft());
@@ -192,18 +232,16 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
     function addCompHistEntry() {
         if (!compHistDraft.fiscal_year) { toast.error("Fiscal year is required"); return; }
         if (compHist.some((c) => c.fiscal_year === compHistDraft.fiscal_year)) { toast.error(`FY${compHistDraft.fiscal_year} already added`); return; }
-        // compensation-history.ts no longer derives sti_amount/lti_amount from
-        // the % server-side (that used to silently round-trip drift) - this
-        // step only has %-entry fields, so the € equivalents are computed
-        // here, once, from the % + base actually entered.
-        const base = compHistDraft.base_salary;
-        const amtOf = (pct: number | null) => (base != null && pct != null ? Math.round((base * pct) / 100) : null);
+        const num = (v: number | "") => (v === "" ? null : v);
         setCompHist((prev) => [...prev, {
-            ...compHistDraft,
-            sti_eligible_amount: amtOf(compHistDraft.sti_eligible_pct),
-            sti_amount: amtOf(compHistDraft.sti_actual_pct),
-            lti_eligible_amount: amtOf(compHistDraft.lti_eligible_pct),
-            lti_amount: amtOf(compHistDraft.lti_actual_pct),
+            key: compHistDraft.key, fiscal_year: compHistDraft.fiscal_year, effective_date: compHistDraft.effective_date,
+            currency: compHistDraft.currency, base_salary: compHistDraft.base_salary, cash_allowance: compHistDraft.cash_allowance,
+            other_bonus: compHistDraft.other_bonus, note: compHistDraft.note,
+            sti_eligible_pct: num(compHistDraft.sti_eligible.pct), sti_eligible_amount: num(compHistDraft.sti_eligible.amount),
+            sti_actual_pct: num(compHistDraft.sti_actual.pct), sti_amount: num(compHistDraft.sti_actual.amount),
+            lti_eligible_pct: num(compHistDraft.lti_eligible.pct), lti_eligible_amount: num(compHistDraft.lti_eligible.amount),
+            lti_actual_pct: num(compHistDraft.lti_actual.pct), lti_amount: num(compHistDraft.lti_actual.amount),
+            pension_contribution: num(compHistDraft.pension.amount), pension_pct: num(compHistDraft.pension.pct),
         }].sort((a, b) => a.fiscal_year - b.fiscal_year));
         setCompHistDraft(emptyCompHistDraft());
         setEffMonth(""); setEffDay("");
@@ -239,18 +277,62 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
 
     // STI/LTI are entered as % of base (how everyone actually talks about a
     // bonus target — "20% target"), matching Compensation History and
-    // Proposals elsewhere in the app; € is always derived, never typed.
+    // Proposals elsewhere in the app; the amount is always derived, never typed.
     const base = Number(comp.base_salary) || 0;
-    const pctToAmt = (pct: number | "") => (pct === "" || !base ? 0 : Math.round((base * Number(pct)) / 100));
-    const stiTargetAmt = pctToAmt(comp.sti_target);
-    const ltiTargetAmt = pctToAmt(comp.lti_target);
-    const totalComp = base + stiTargetAmt + ltiTargetAmt + (Number(comp.other_bonus) || 0);
-    const amtHint = (pct: number | "") => (pct !== "" && base > 0 ? ` = €${pctToAmt(pct).toLocaleString()}` : "");
+    function setCompDual(key: CompDualKey, next: { pct: number | ""; amount: number | "" }) {
+        setComp((prev) => ({ ...prev, [key]: { ...prev[key], ...next } }));
+    }
+    function setCompDualMode(key: CompDualKey, mode: MoneyMode) {
+        setComp((prev) => ({ ...prev, [key]: { ...prev[key], mode } }));
+    }
+    const totalComp = base + (Number(comp.sti_target.amount) || 0) + (Number(comp.lti_target.amount) || 0) + (Number(comp.other_bonus) || 0);
 
-    // Compensation History (step 3) — Eligible/Actual % fields also compute a
-    // live € hint, the same "type a %, see the money" pattern as step 1's
-    // PctField, using that row's own Base Salary rather than step 1's.
-    const histAmtHint = (pct: number | null) => (pct != null && compHistDraft.base_salary ? ` = €${Math.round((compHistDraft.base_salary * pct) / 100).toLocaleString()}` : "");
+    // Switching "Entered in" mid-form must re-express every amount already
+    // typed in the new currency's magnitude, not just relabel it - same
+    // reasoning as changeCurrency() in compensation-benefits-card.tsx. The %
+    // side of each dual field is untouched - percentages are currency-agnostic.
+    function changeCompCurrency(next: string) {
+        const rateOf = (code: string) => (code === "EUR" ? 1 : rates[code] ?? 1);
+        const factor = rateOf(comp.currency) / rateOf(next);
+        const conv = (v: number | ""): number | "" => (v === "" ? "" : Math.round(Number(v) * factor * 100) / 100);
+        setComp((prev) => {
+            const next2 = {
+                ...prev, currency: next,
+                base_salary: conv(prev.base_salary), other_bonus: conv(prev.other_bonus),
+                allowance_company_car: conv(prev.allowance_company_car), allowance_mobility: conv(prev.allowance_mobility),
+                allowance_home_office: conv(prev.allowance_home_office), allowance_private_medical: conv(prev.allowance_private_medical),
+            };
+            COMP_DUAL_KEYS.forEach((k) => { next2[k] = { ...prev[k], amount: conv(prev[k].amount) }; });
+            return next2;
+        });
+    }
+    const compRate = comp.currency !== "EUR" ? rates[comp.currency] : 1;
+
+    // Compensation History (step 3) — same dual %/amount entry, using that
+    // row's own Base Salary (not step 1's) as the DualModeMoneyInput `base`.
+    const histBase = compHistDraft.base_salary;
+    function setHistDual(key: HistDualKey, next: { pct: number | ""; amount: number | "" }) {
+        setCompHistDraft((prev) => ({ ...prev, [key]: { ...prev[key], ...next } }));
+    }
+    function setHistDualMode(key: HistDualKey, mode: MoneyMode) {
+        setCompHistDraft((prev) => ({ ...prev, [key]: { ...prev[key], mode } }));
+    }
+
+    function changeHistCurrency(next: string) {
+        const rateOf = (code: string) => (code === "EUR" ? 1 : rates[code] ?? 1);
+        const factor = rateOf(compHistDraft.currency) / rateOf(next);
+        const conv = (v: number | null): number | null => (v == null ? null : Math.round(v * factor * 100) / 100);
+        const convDual = (v: number | ""): number | "" => (v === "" ? "" : Math.round(Number(v) * factor * 100) / 100);
+        setCompHistDraft((prev) => {
+            const next2: CompHistDraft = {
+                ...prev, currency: next,
+                base_salary: conv(prev.base_salary), cash_allowance: conv(prev.cash_allowance), other_bonus: conv(prev.other_bonus),
+            };
+            HIST_DUAL_KEYS.forEach((k) => { next2[k] = { ...prev[k], amount: convDual(prev[k].amount) }; });
+            return next2;
+        });
+    }
+    const histRate = compHistDraft.currency !== "EUR" ? rates[compHistDraft.currency] : 1;
 
     // Effective Date only captures month/day — the year always comes from
     // Fiscal Year (already a field on this same step), so there's no
@@ -272,15 +354,17 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
         setSaving(true);
         const num = (v: number | "") => (v === "" ? null : Number(v));
         // sti_target/sti_max/lti_target/lti_max were entered as % of base —
-        // convert to € here; the DB column (and every reader of it elsewhere
-        // in the app) still expects a plain euro amount.
-        const compPayload = Object.values(comp).some((v) => v !== "")
+        // convert to an amount here; the DB column (and every reader of it
+        // elsewhere in the app) still expects a plain amount, which the
+        // server then converts to EUR using `currency` below.
+        const compPayload = compHasAnyValue(comp)
             ? {
+                currency: comp.currency,
                 base_salary: num(comp.base_salary),
-                sti_target: comp.sti_target === "" ? null : pctToAmt(comp.sti_target),
-                sti_max: comp.sti_max === "" ? null : pctToAmt(comp.sti_max),
-                lti_target: comp.lti_target === "" ? null : pctToAmt(comp.lti_target),
-                lti_max: comp.lti_max === "" ? null : pctToAmt(comp.lti_max),
+                sti_target: comp.sti_target.amount === "" ? null : Number(comp.sti_target.amount),
+                sti_max: comp.sti_max.amount === "" ? null : Number(comp.sti_max.amount),
+                lti_target: comp.lti_target.amount === "" ? null : Number(comp.lti_target.amount),
+                lti_max: comp.lti_max.amount === "" ? null : Number(comp.lti_max.amount),
                 other_bonus: num(comp.other_bonus),
                 allowance_company_car: num(comp.allowance_company_car),
                 allowance_mobility: num(comp.allowance_mobility),
@@ -293,6 +377,8 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
             name: personal.name,
             office_id: Number(personal.office_id),
             position_id: Number(personal.position_id),
+            country: personal.country || null,
+            city: personal.city || null,
             date_of_birth: personal.date_of_birth || null,
             gender: personal.gender || null,
             nationality: personal.nationality || null,
@@ -480,6 +566,14 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                     <Combobox options={COUNTRIES} value={personal.nationality || null} onChange={(v) => setPersonal({ ...personal, nationality: v || "" })} placeholder="Select…" searchPlaceholder="Search country…" />
                                 </div>
                                 <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600" title="Where this person actually sits - independent of which company/office they're assigned to.">Location (country)</label>
+                                    <Combobox options={COUNTRIES} value={personal.country || null} onChange={(v) => setPersonal({ ...personal, country: v || "" })} placeholder="Select…" searchPlaceholder="Search or type new…" />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Location (city)</label>
+                                    <Input value={personal.city} onChange={(e) => setPersonal({ ...personal, city: e.target.value })} placeholder="optional" />
+                                </div>
+                                <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Date of Birth</label>
                                     <PrecisionDateInput value={personal.date_of_birth} onChange={(v) => setPersonal({ ...personal, date_of_birth: v })} />
                                 </div>
@@ -510,23 +604,69 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                     {step === 1 && (
                         <div className="space-y-3">
                             <p className="text-[12.5px] text-muted-foreground">Optional — can be filled in later from the profile page.</p>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">Entered in</label>
+                                <select
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-48"
+                                    value={comp.currency}
+                                    onChange={(e) => changeCompCurrency(e.target.value)}
+                                >
+                                    {Object.keys(rates).sort((a, b) => (a === "EUR" ? -1 : b === "EUR" ? 1 : a.localeCompare(b))).map((code) => (
+                                        <option key={code} value={code}>{code}</option>
+                                    ))}
+                                </select>
+                                {comp.currency !== "EUR" && (
+                                    <p className="mt-1 text-[10.5px] text-slate-400">
+                                        Every amount below is in {comp.currency}. {compRate ? `Saved as the EUR equivalent at today's rate (1 ${comp.currency} = ${Math.round(compRate * 10000) / 10000} EUR).` : `No rate set for ${comp.currency} yet — add one in Settings > Currency before saving.`}
+                                    </p>
+                                )}
+                            </div>
                             <div className="rounded-lg bg-slate-50 px-3 py-2 text-[13px]">
                                 <span className="text-slate-500">Total Compensation (calculated)</span>
-                                <span className="ml-2 font-bold text-[#0b1f3a]">€{totalComp.toLocaleString()}</span>
+                                <span className="ml-2 font-bold text-[#0b1f3a]">{formatCurrency(totalComp, comp.currency)}</span>
                                 <div className="mt-0.5 text-[10.5px] text-slate-400">= Base Salary + STI Target + LTI Target + Other Bonus (allowances &amp; benefits not included)</div>
                             </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <CompField label="Base Salary" currencyLabel={comp.currency} value={comp.base_salary} onChange={(v) => setComp({ ...comp, base_salary: v })} />
+                                <CompField label="Other Bonus" currencyLabel={comp.currency} value={comp.other_bonus} onChange={(v) => setComp({ ...comp, other_bonus: v })} />
+                            </div>
+
+                            {/* STI Target and Max grouped together, dual %/amount entry - same pattern as the profile's own edit dialog */}
+                            <div className="rounded-lg border border-slate-200 p-3">
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">STI / Short-term incentive</div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="mb-1 block text-[11px] text-slate-500">Target</label>
+                                        <DualModeMoneyInput mode={comp.sti_target.mode} onModeChange={(m) => setCompDualMode("sti_target", m)} pct={comp.sti_target.pct} amount={comp.sti_target.amount} base={base} onChange={(next) => setCompDual("sti_target", next)} currencyLabel={comp.currency} />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-[11px] text-slate-500">Max</label>
+                                        <DualModeMoneyInput mode={comp.sti_max.mode} onModeChange={(m) => setCompDualMode("sti_max", m)} pct={comp.sti_max.pct} amount={comp.sti_max.amount} base={base} onChange={(next) => setCompDual("sti_max", next)} currencyLabel={comp.currency} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* LTI Target and Max grouped together */}
+                            <div className="rounded-lg border border-slate-200 p-3">
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">LTI / Long-term incentive</div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="mb-1 block text-[11px] text-slate-500">Target</label>
+                                        <DualModeMoneyInput mode={comp.lti_target.mode} onModeChange={(m) => setCompDualMode("lti_target", m)} pct={comp.lti_target.pct} amount={comp.lti_target.amount} base={base} onChange={(next) => setCompDual("lti_target", next)} currencyLabel={comp.currency} />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-[11px] text-slate-500">Max</label>
+                                        <DualModeMoneyInput mode={comp.lti_max.mode} onModeChange={(m) => setCompDualMode("lti_max", m)} pct={comp.lti_max.pct} amount={comp.lti_max.amount} base={base} onChange={(next) => setCompDual("lti_max", next)} currencyLabel={comp.currency} />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                                <CompField label="Base Salary" value={comp.base_salary} onChange={(v) => setComp({ ...comp, base_salary: v })} />
-                                <PctField label="STI Target" value={comp.sti_target} onChange={(v) => setComp({ ...comp, sti_target: v })} hint={amtHint(comp.sti_target)} />
-                                <PctField label="STI Max" value={comp.sti_max} onChange={(v) => setComp({ ...comp, sti_max: v })} hint={amtHint(comp.sti_max)} />
-                                <PctField label="LTI Target" value={comp.lti_target} onChange={(v) => setComp({ ...comp, lti_target: v })} hint={amtHint(comp.lti_target)} />
-                                <PctField label="LTI Max" value={comp.lti_max} onChange={(v) => setComp({ ...comp, lti_max: v })} hint={amtHint(comp.lti_max)} />
-                                <CompField label="Other Bonus" value={comp.other_bonus} onChange={(v) => setComp({ ...comp, other_bonus: v })} />
-                                <CompField label="Allowance · Car" value={comp.allowance_company_car} onChange={(v) => setComp({ ...comp, allowance_company_car: v })} />
-                                <CompField label="Allowance · Mobile" value={comp.allowance_mobility} onChange={(v) => setComp({ ...comp, allowance_mobility: v })} />
-                                <CompField label="Allowance · Housing" value={comp.allowance_home_office} onChange={(v) => setComp({ ...comp, allowance_home_office: v })} />
-                                <CompField label="Benefit · Medical" value={comp.allowance_private_medical} onChange={(v) => setComp({ ...comp, allowance_private_medical: v })} />
-                                <div className="sm:col-span-3">
+                                <CompField label="Allowance · Car" currencyLabel={comp.currency} value={comp.allowance_company_car} onChange={(v) => setComp({ ...comp, allowance_company_car: v })} />
+                                <CompField label="Allowance · Mobile" currencyLabel={comp.currency} value={comp.allowance_mobility} onChange={(v) => setComp({ ...comp, allowance_mobility: v })} />
+                                <CompField label="Allowance · Housing" currencyLabel={comp.currency} value={comp.allowance_home_office} onChange={(v) => setComp({ ...comp, allowance_home_office: v })} />
+                                <CompField label="Benefit · Medical" currencyLabel={comp.currency} value={comp.allowance_private_medical} onChange={(v) => setComp({ ...comp, allowance_private_medical: v })} />
+                                <div className="col-span-2 sm:col-span-3">
                                     <label className="mb-1 block truncate text-[10px] text-muted-foreground" title="Other benefit (please specify)">Other benefit (please specify)</label>
                                     <Input className="h-9" value={comp.allowance_family_cover} onChange={(e) => setComp({ ...comp, allowance_family_cover: e.target.value })} placeholder="e.g. gym membership, transport pass…" />
                                 </div>
@@ -538,6 +678,23 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                         <div className="space-y-3">
                             <p className="text-[12.5px] text-muted-foreground">Optional — salary review history for past fiscal years (useful when backfilling someone who's already been with the company for a while). STI/LTI amounts and Total Comp are calculated from the % fields, same as the profile page.</p>
                             <div className="space-y-2 rounded-lg border p-3">
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Entered in</label>
+                                    <select
+                                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-48"
+                                        value={compHistDraft.currency}
+                                        onChange={(e) => changeHistCurrency(e.target.value)}
+                                    >
+                                        {Object.keys(rates).sort((a, b) => (a === "EUR" ? -1 : b === "EUR" ? 1 : a.localeCompare(b))).map((code) => (
+                                            <option key={code} value={code}>{code}</option>
+                                        ))}
+                                    </select>
+                                    {compHistDraft.currency !== "EUR" && (
+                                        <p className="mt-1 text-[10.5px] text-slate-400">
+                                            Every amount below is in {compHistDraft.currency}. {histRate ? `Saved as the EUR equivalent at today's rate (1 ${compHistDraft.currency} = ${Math.round(histRate * 10000) / 10000} EUR).` : `No rate set for ${compHistDraft.currency} yet — add one in Settings > Currency before saving.`}
+                                        </p>
+                                    )}
+                                </div>
                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                     <NumField
                                         label="Fiscal Year"
@@ -568,16 +725,48 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                             />
                                         </div>
                                     </div>
-                                    <NumField label="Base Salary (€)" value={compHistDraft.base_salary} onChange={(v) => setCompHistDraft({ ...compHistDraft, base_salary: v })} />
-                                    <NumField label="Cash Allowance (€)" value={compHistDraft.cash_allowance} onChange={(v) => setCompHistDraft({ ...compHistDraft, cash_allowance: v })} />
-                                    <NumField label="STI Eligible %" value={compHistDraft.sti_eligible_pct} onChange={(v) => setCompHistDraft({ ...compHistDraft, sti_eligible_pct: v })} hint={histAmtHint(compHistDraft.sti_eligible_pct)} />
-                                    <NumField label="STI Actual %" value={compHistDraft.sti_actual_pct} onChange={(v) => setCompHistDraft({ ...compHistDraft, sti_actual_pct: v })} hint={histAmtHint(compHistDraft.sti_actual_pct)} />
-                                    <NumField label="LTI Eligible %" value={compHistDraft.lti_eligible_pct} onChange={(v) => setCompHistDraft({ ...compHistDraft, lti_eligible_pct: v })} hint={histAmtHint(compHistDraft.lti_eligible_pct)} />
-                                    <NumField label="LTI Actual %" value={compHistDraft.lti_actual_pct} onChange={(v) => setCompHistDraft({ ...compHistDraft, lti_actual_pct: v })} hint={histAmtHint(compHistDraft.lti_actual_pct)} />
-                                    <NumField label="Pension (€)" value={compHistDraft.pension_contribution} onChange={(v) => setCompHistDraft({ ...compHistDraft, pension_contribution: v })} />
-                                    <div className="col-span-2 sm:col-span-3">
-                                        <label className="mb-1 block text-[10px] text-muted-foreground">Note</label>
-                                        <Input className="h-9" value={compHistDraft.note || ""} onChange={(e) => setCompHistDraft({ ...compHistDraft, note: e.target.value || null })} />
+                                    <NumField label={`Base Salary (${compHistDraft.currency})`} value={compHistDraft.base_salary} onChange={(v) => setCompHistDraft({ ...compHistDraft, base_salary: v })} />
+                                    <NumField label={`Cash Allowance (${compHistDraft.currency})`} value={compHistDraft.cash_allowance} onChange={(v) => setCompHistDraft({ ...compHistDraft, cash_allowance: v })} />
+                                </div>
+
+                                {/* STI Eligible and Actual grouped together, dual %/amount entry */}
+                                <div className="rounded-lg border border-slate-200 p-3">
+                                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">STI / Short-term incentive</div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="mb-1 block text-[11px] text-slate-500">Eligible (target)</label>
+                                            <DualModeMoneyInput mode={compHistDraft.sti_eligible.mode} onModeChange={(m) => setHistDualMode("sti_eligible", m)} pct={compHistDraft.sti_eligible.pct} amount={compHistDraft.sti_eligible.amount} base={histBase} onChange={(next) => setHistDual("sti_eligible", next)} currencyLabel={compHistDraft.currency} />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-[11px] text-slate-500">Actual (paid)</label>
+                                            <DualModeMoneyInput mode={compHistDraft.sti_actual.mode} onModeChange={(m) => setHistDualMode("sti_actual", m)} pct={compHistDraft.sti_actual.pct} amount={compHistDraft.sti_actual.amount} base={histBase} onChange={(next) => setHistDual("sti_actual", next)} currencyLabel={compHistDraft.currency} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* LTI Eligible and Actual grouped together */}
+                                <div className="rounded-lg border border-slate-200 p-3">
+                                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">LTI / Long-term incentive</div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="mb-1 block text-[11px] text-slate-500">Eligible (target)</label>
+                                            <DualModeMoneyInput mode={compHistDraft.lti_eligible.mode} onModeChange={(m) => setHistDualMode("lti_eligible", m)} pct={compHistDraft.lti_eligible.pct} amount={compHistDraft.lti_eligible.amount} base={histBase} onChange={(next) => setHistDual("lti_eligible", next)} currencyLabel={compHistDraft.currency} />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-[11px] text-slate-500">Actual (paid)</label>
+                                            <DualModeMoneyInput mode={compHistDraft.lti_actual.mode} onModeChange={(m) => setHistDualMode("lti_actual", m)} pct={compHistDraft.lti_actual.pct} amount={compHistDraft.lti_actual.amount} base={histBase} onChange={(next) => setHistDual("lti_actual", next)} currencyLabel={compHistDraft.currency} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-slate-600">Pension Contribution</label>
+                                        <DualModeMoneyInput mode={compHistDraft.pension.mode} onModeChange={(m) => setHistDualMode("pension", m)} pct={compHistDraft.pension.pct} amount={compHistDraft.pension.amount} base={histBase} onChange={(next) => setHistDual("pension", next)} currencyLabel={compHistDraft.currency} />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-slate-600">Note</label>
+                                        <Input value={compHistDraft.note || ""} onChange={(e) => setCompHistDraft({ ...compHistDraft, note: e.target.value || null })} />
                                     </div>
                                 </div>
                                 <Button size="sm" variant="outline" className="gap-1.5" onClick={addCompHistEntry}><Plus className="h-3.5 w-3.5" /> Add fiscal year</Button>
@@ -585,14 +774,12 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                             {compHist.length > 0 && (
                                 <div className="divide-y divide-slate-100 rounded-lg border">
                                     {compHist.map((c) => {
-                                        const stiAmt = c.base_salary && c.sti_actual_pct ? Math.round((c.base_salary * c.sti_actual_pct) / 100) : 0;
-                                        const ltiAmt = c.base_salary && c.lti_actual_pct ? Math.round((c.base_salary * c.lti_actual_pct) / 100) : 0;
-                                        const total = (c.base_salary ?? 0) + stiAmt + ltiAmt;
+                                        const total = (c.base_salary ?? 0) + (c.sti_amount ?? 0) + (c.lti_amount ?? 0);
                                         return (
                                             <div key={c.fiscal_year} className="flex items-center justify-between gap-2 px-3 py-2 text-[12.5px]">
                                                 <div className="min-w-0">
-                                                    <div className="font-medium text-[#0f172a]">FY{c.fiscal_year} — €{total.toLocaleString()} total</div>
-                                                    <div className="text-[11px] text-slate-400">Base €{(c.base_salary ?? 0).toLocaleString()}{c.note ? ` · ${c.note}` : ""}</div>
+                                                    <div className="font-medium text-[#0f172a]">FY{c.fiscal_year} — {formatCurrency(total, c.currency)} total</div>
+                                                    <div className="text-[11px] text-slate-400">Base {formatCurrency(c.base_salary ?? 0, c.currency)}{c.currency !== "EUR" ? ` · entered in ${c.currency}` : ""}{c.note ? ` · ${c.note}` : ""}</div>
                                                 </div>
                                                 <button onClick={() => setCompHist((prev) => prev.filter((x) => x.fiscal_year !== c.fiscal_year))} className="shrink-0 text-red-300 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                                             </div>
@@ -676,6 +863,7 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                 <ReviewRow label="Position" value={positionLabel?.name || "—"} />
                                 <ReviewRow label="Reports to" value={managerLabel?.name || "— set later on the org chart —"} />
                                 <ReviewRow label="Job Grade" value={personal.job_grade || "—"} />
+                                <ReviewRow label="Location" value={[personal.country, personal.city].filter(Boolean).join(" · ") || "—"} />
                                 <ReviewRow label="Gender" value={personal.gender || "—"} />
                                 <ReviewRow label="Nationality" value={personal.nationality || "—"} />
                                 <ReviewRow label="Date of Birth" value={personal.date_of_birth || "—"} />
@@ -685,19 +873,20 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                 <ReviewRow label="Photo" value={photoFile ? photoFile.name : "—"} />
                             </ReviewSection>
                             <ReviewSection title="Compensation & Benefits">
-                                {Object.values(comp).some((v) => v !== "") ? (
+                                {compHasAnyValue(comp) ? (
                                     <>
-                                        <ReviewRow label="Total Compensation (calculated)" value={`€${totalComp.toLocaleString()}`} />
-                                        {comp.base_salary !== "" && <ReviewRow label="Base Salary" value={`€${Number(comp.base_salary).toLocaleString()}`} />}
-                                        {comp.sti_target !== "" && <ReviewRow label="STI Target" value={`${comp.sti_target}% (€${stiTargetAmt.toLocaleString()})`} />}
-                                        {comp.sti_max !== "" && <ReviewRow label="STI Max" value={`${comp.sti_max}% (€${pctToAmt(comp.sti_max).toLocaleString()})`} />}
-                                        {comp.lti_target !== "" && <ReviewRow label="LTI Target" value={`${comp.lti_target}% (€${ltiTargetAmt.toLocaleString()})`} />}
-                                        {comp.lti_max !== "" && <ReviewRow label="LTI Max" value={`${comp.lti_max}% (€${pctToAmt(comp.lti_max).toLocaleString()})`} />}
-                                        {comp.other_bonus !== "" && <ReviewRow label="Other Bonus" value={`€${Number(comp.other_bonus).toLocaleString()}`} />}
-                                        {comp.allowance_company_car !== "" && <ReviewRow label="Allowance · Car" value={`€${Number(comp.allowance_company_car).toLocaleString()}`} />}
-                                        {comp.allowance_mobility !== "" && <ReviewRow label="Allowance · Mobile" value={`€${Number(comp.allowance_mobility).toLocaleString()}`} />}
-                                        {comp.allowance_home_office !== "" && <ReviewRow label="Allowance · Housing" value={`€${Number(comp.allowance_home_office).toLocaleString()}`} />}
-                                        {comp.allowance_private_medical !== "" && <ReviewRow label="Benefit · Medical" value={`€${Number(comp.allowance_private_medical).toLocaleString()}`} />}
+                                        {comp.currency !== "EUR" && <ReviewRow label="Entered in" value={comp.currency} />}
+                                        <ReviewRow label="Total Compensation (calculated)" value={formatCurrency(totalComp, comp.currency)} />
+                                        {comp.base_salary !== "" && <ReviewRow label="Base Salary" value={formatCurrency(Number(comp.base_salary), comp.currency)} />}
+                                        {comp.sti_target.amount !== "" && <ReviewRow label="STI Target" value={`${comp.sti_target.pct}% (${formatCurrency(Number(comp.sti_target.amount), comp.currency)})`} />}
+                                        {comp.sti_max.amount !== "" && <ReviewRow label="STI Max" value={`${comp.sti_max.pct}% (${formatCurrency(Number(comp.sti_max.amount), comp.currency)})`} />}
+                                        {comp.lti_target.amount !== "" && <ReviewRow label="LTI Target" value={`${comp.lti_target.pct}% (${formatCurrency(Number(comp.lti_target.amount), comp.currency)})`} />}
+                                        {comp.lti_max.amount !== "" && <ReviewRow label="LTI Max" value={`${comp.lti_max.pct}% (${formatCurrency(Number(comp.lti_max.amount), comp.currency)})`} />}
+                                        {comp.other_bonus !== "" && <ReviewRow label="Other Bonus" value={formatCurrency(Number(comp.other_bonus), comp.currency)} />}
+                                        {comp.allowance_company_car !== "" && <ReviewRow label="Allowance · Car" value={formatCurrency(Number(comp.allowance_company_car), comp.currency)} />}
+                                        {comp.allowance_mobility !== "" && <ReviewRow label="Allowance · Mobile" value={formatCurrency(Number(comp.allowance_mobility), comp.currency)} />}
+                                        {comp.allowance_home_office !== "" && <ReviewRow label="Allowance · Housing" value={formatCurrency(Number(comp.allowance_home_office), comp.currency)} />}
+                                        {comp.allowance_private_medical !== "" && <ReviewRow label="Benefit · Medical" value={formatCurrency(Number(comp.allowance_private_medical), comp.currency)} />}
                                         {comp.allowance_family_cover.trim() !== "" && <ReviewRow label="Other benefit" value={comp.allowance_family_cover} />}
                                     </>
                                 ) : <p className="text-slate-400">Not entered</p>}
@@ -706,10 +895,8 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
                                 {compHist.length ? (
                                     <div className="space-y-1">
                                         {compHist.map((c) => {
-                                            const stiAmt = c.base_salary && c.sti_actual_pct ? Math.round((c.base_salary * c.sti_actual_pct) / 100) : 0;
-                                            const ltiAmt = c.base_salary && c.lti_actual_pct ? Math.round((c.base_salary * c.lti_actual_pct) / 100) : 0;
-                                            const total = (c.base_salary ?? 0) + stiAmt + ltiAmt;
-                                            return <ReviewRow key={c.fiscal_year} label={`FY${c.fiscal_year}`} value={`€${total.toLocaleString()} total (base €${(c.base_salary ?? 0).toLocaleString()})`} />;
+                                            const total = (c.base_salary ?? 0) + (c.sti_amount ?? 0) + (c.lti_amount ?? 0);
+                                            return <ReviewRow key={c.fiscal_year} label={`FY${c.fiscal_year}`} value={`${formatCurrency(total, c.currency)} total (base ${formatCurrency(c.base_salary ?? 0, c.currency)})${c.currency !== "EUR" ? ` — entered in ${c.currency}` : ""}`} />;
                                         })}
                                     </div>
                                 ) : <p className="text-slate-400">Not entered</p>}
@@ -768,10 +955,10 @@ export function AddEmployeeWizard({ open, onOpenChange, offices: initialOffices,
     );
 }
 
-function CompField({ label, value, onChange, hint }: { label: string; value: number | ""; onChange: (v: number | "") => void; hint?: string }) {
+function CompField({ label, value, onChange, hint, currencyLabel = "€" }: { label: string; value: number | ""; onChange: (v: number | "") => void; hint?: string; currencyLabel?: string }) {
     return (
         <div>
-            <label className="mb-1 block truncate text-[10px] text-muted-foreground" title={label}>{label} (€)</label>
+            <label className="mb-1 block truncate text-[10px] text-muted-foreground" title={label}>{label} ({currencyLabel})</label>
             <Input type="number" className="h-9" value={value} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} />
             {hint && <div className="mt-0.5 text-[9.5px] text-slate-400">{hint}</div>}
         </div>
@@ -780,15 +967,6 @@ function CompField({ label, value, onChange, hint }: { label: string; value: num
 // STI/LTI are entered as % of base, not € — matches Compensation History and
 // Proposals, where a bonus is always expressed as a target %, and the euro
 // figure is shown only as a derived readout underneath, never typed directly.
-function PctField({ label, value, onChange, hint }: { label: string; value: number | ""; onChange: (v: number | "") => void; hint?: string }) {
-    return (
-        <div>
-            <label className="mb-1 block truncate text-[10px] text-muted-foreground" title={label}>{label} (%)</label>
-            <Input type="number" className="h-9" value={value} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} />
-            {hint && <div className="mt-0.5 text-[9.5px] text-slate-400">{hint}</div>}
-        </div>
-    );
-}
 function NumField({ label, value, onChange, hint }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string }) {
     return (
         <div>

@@ -12,8 +12,9 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/format";
-import { useCurrencyDisplay } from "@/components/currency-display";
+import { formatCurrency, toLocalAmount } from "@/lib/format";
+import { useCurrencyRates } from "@/components/currency-display";
+import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
 
 const n = (v: unknown): number | null => (v == null || v === "" ? null : Number(v));
 
@@ -93,10 +94,11 @@ function prorationFraction(fiscalYear: number, effectiveDate: string | null): nu
 
 export function CompensationHistoryCard({ employeeId, history, canEdit = true }: { employeeId: number; history: CompensationHistoryEntry[]; canEdit?: boolean }) {
     const router = useRouter();
-    const { rates, convert, displayCurrency } = useCurrencyDisplay();
+    const rates = useCurrencyRates();
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [saving, setSaving] = useState(false);
+    const [mode, setMode] = useState<MoneyDisplayMode>("local");
 
     function openAdd() { setDraft(emptyDraft()); setOpen(true); }
     function openEdit(h: CompensationHistoryEntry) { setDraft(toDraft(h)); setOpen(true); }
@@ -188,11 +190,14 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
         <Card className="overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.04)]">
             <div className="flex items-center justify-between border-b bg-[#0b1f3a] px-4 py-2.5 text-sm font-semibold text-white">
                 <span>Compensation History <span className="font-normal text-white/50">· per fiscal year</span></span>
-                {canEdit && (
-                    <button onClick={openAdd} className="flex items-center gap-1 text-[11px] font-medium text-slate-200 hover:text-white transition-colors">
-                        <Plus className="h-3.5 w-3.5" /> Add year
-                    </button>
-                )}
+                <div className="flex items-center gap-3">
+                    <LocalEurToggle mode={mode} onChange={setMode} dark />
+                    {canEdit && (
+                        <button onClick={openAdd} className="flex items-center gap-1 text-[11px] font-medium text-slate-200 hover:text-white transition-colors">
+                            <Plus className="h-3.5 w-3.5" /> Add year
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -212,26 +217,33 @@ export function CompensationHistoryCard({ employeeId, history, canEdit = true }:
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {sorted.map((h) => {
-                            const cv = (v: number | null) => (v == null ? null : convert(v));
+                            // Each row keeps its OWN entered currency by default ("local") -
+                            // one history card can hold a GBP year next to a CHF year next
+                            // to a EUR year, each shown as it was actually entered - the
+                            // toggle above forces every row to EUR instead.
+                            const fmt = (v: number | null) => {
+                                const conv = mode === "eur" ? { value: v, currency: "EUR" } : toLocalAmount(v, h.currency, h.fx_rate_used);
+                                return formatCurrency(conv.value, conv.currency);
+                            };
                             return (
                             <tr key={h.id} className="hover:bg-slate-50/60">
                                 <td className="px-3 py-2 font-semibold text-[#0f172a]">
                                     {h.fiscal_year}A
                                     {h.currency !== "EUR" && <div className="text-[9px] font-normal text-slate-400">entered in {h.currency}</div>}
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{formatCurrency(cv(n(h.base_salary)), displayCurrency)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(cv(n(h.cash_allowance)), displayCurrency)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{fmt(n(h.base_salary))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.cash_allowance))}</td>
                                 <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                                    {formatCurrency(cv(n(h.sti_amount)), displayCurrency)}
+                                    {fmt(n(h.sti_amount))}
                                     <div className="text-[9.5px] text-slate-400">{pctPair(n(h.sti_actual_pct), n(h.sti_eligible_pct))}</div>
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                                    {formatCurrency(cv(n(h.lti_amount)), displayCurrency)}
+                                    {fmt(n(h.lti_amount))}
                                     <div className="text-[9.5px] text-slate-400">{pctPair(n(h.lti_actual_pct), n(h.lti_eligible_pct))}</div>
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(cv(n(h.pension_contribution)), displayCurrency)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{formatCurrency(cv(n(h.other_bonus)), displayCurrency)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-bold text-[#0b1f3a]">{formatCurrency(cv(n(h.total_comp)), displayCurrency)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.pension_contribution))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmt(n(h.other_bonus))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-bold text-[#0b1f3a]">{fmt(n(h.total_comp))}</td>
                                 <td className="px-3 py-2">
                                     {canEdit && (
                                         <div className="flex items-center justify-end gap-1">

@@ -63,6 +63,11 @@ export interface EmployeeListItem extends EmployeeRow {
     sti_target: number | null;
     lti_target: number | null;
     other_bonus: number | null;
+    // The currency this person's compensation was entered in, and the rate
+    // frozen at save time - lets a list/table show each row in its own
+    // "local" currency by default (see toLocalAmount in @/lib/format).
+    currency: string;
+    fx_rate_used: number | null;
     latest_grade: string | null;
     team_size: number;
 }
@@ -214,6 +219,8 @@ export async function listEmployees(): Promise<EmployeeListItem[]> {
             sti_target: c?.sti_target ?? null,
             lti_target: c?.lti_target ?? null,
             other_bonus: c?.other_bonus ?? null,
+            currency: c?.currency || "EUR",
+            fx_rate_used: c?.fx_rate_used ?? null,
             latest_grade: latestGrade.get(e.employee_id)?.grade ?? null,
             team_size: positionId != null ? teams.get(positionId) || 0 : 0,
         };
@@ -380,6 +387,8 @@ export async function getEmployee(id: number): Promise<EmployeeDetail | null> {
         sti_target: decryptedComp?.sti_target ?? null,
         lti_target: decryptedComp?.lti_target ?? null,
         other_bonus: decryptedComp?.other_bonus ?? null,
+        currency: decryptedComp?.currency || "EUR",
+        fx_rate_used: decryptedComp?.fx_rate_used ?? null,
         latest_grade: (perf && perf.length) ? perf[perf.length - 1].grade : null,
         team_size: subjectPositionId != null ? teams.get(subjectPositionId) || 0 : 0,
         compensation: decryptedComp ?? null,

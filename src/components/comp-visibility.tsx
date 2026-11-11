@@ -2,7 +2,6 @@
 
 import { createContext, useContext } from "react";
 import { formatCurrency } from "@/lib/format";
-import { useCurrencyDisplay } from "@/components/currency-display";
 import type { CompVisibility } from "@/lib/auth/types";
 
 // The viewer's effective compensation visibility, provided once at the root.
@@ -22,19 +21,17 @@ export function useCompVisibility() {
 //  visible → the real (formatted) amount
 //  blurred → a blurred masked amount (no real value underneath)
 //  hidden  → a small "restricted" mark
-// `value` is always the stored EUR-equivalent amount, whatever currency the
-// record was actually entered in (see currency-display.tsx) - this converts
-// it live to whatever the viewer has picked to look at right now. A `currency`
-// override is no longer accepted: display currency is a single global
-// preference, not a per-record thing.
-export function Money({ value, className }: { value: number | null | undefined; className?: string }) {
+// `currency` is whatever the caller has already decided to show this figure
+// in (each table/card picks that per its own Local/EUR toggle - see
+// local-eur-toggle.tsx) - this component only ever formats and masks, it
+// never converts.
+export function Money({ value, currency = "EUR", className }: { value: number | null | undefined; currency?: string; className?: string }) {
     const vis = useContext(Ctx);
-    const { displayCurrency, convert } = useCurrencyDisplay();
-    if (vis === "visible") return <span className={className}>{formatCurrency(value == null ? value : convert(value), displayCurrency)}</span>;
+    if (vis === "visible") return <span className={className}>{formatCurrency(value, currency)}</span>;
     if (vis === "blurred") {
         return (
             <span className={className} title="Compensation hidden" aria-label="Compensation hidden">
-                <span className="select-none blur-[3px]" aria-hidden>{formatCurrency(0, displayCurrency).replace("0", "000,000")}</span>
+                <span className="select-none blur-[3px]" aria-hidden>{formatCurrency(0, currency).replace("0", "000,000")}</span>
             </span>
         );
     }
