@@ -11,8 +11,10 @@ import { ImportReviewDialog } from "./import-review";
 import { ProfileImportReviewDialog } from "./profile-import-review";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Upload, Download, FileText, Loader2, FileSpreadsheet } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Plus, Upload, Download, FileText, Loader2, FileSpreadsheet, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { localDisplay } from "@/lib/format";
 
 interface Opt { id: number; name: string; banner_id: number | null }
 interface OfficeOpt { office_id: number; banner_id: number; banner_name: string; country: string; city: string | null }
@@ -32,13 +34,25 @@ export function EmployeeToolbar({ employees, offices, positions, functions }: { 
     const profileFileRef = useRef<HTMLInputElement>(null);
     const [profileReview, setProfileReview] = useState<{ employees: AnalyzedProfileEmployee[]; orphanExperience: OrphanExperienceRow[] } | null>(null);
 
-    function exportCsv() {
-        const rows = employees.map((e) => ({
-            employee_id: e.employee_id, name: e.name, position: e.position_title || "", company: e.banner_name || "",
-            function: e.function_name || "", country: e.country || "", status: e.status,
-            total_compensation: e.total_compensation ?? "", latest_grade: e.latest_grade || "", team_size: e.team_size,
-            hire_date: e.hire_date || "",
-        }));
+    // "Local" exports each row in whatever currency that person's compensation
+    // was actually entered in (a GBP row next to a DKK row next to a EUR row)
+    // - the currency column says which, since total_compensation alone would
+    // be ambiguous otherwise. "EUR" exports everyone in the same unit for a
+    // true apples-to-apples total, matching the Employees table's own
+    // Local/EUR toggle above.
+    function exportCsv(currencyMode: "local" | "eur") {
+        const rows = employees.map((e) => {
+            const comp = currencyMode === "eur"
+                ? { value: e.total_compensation, currency: "EUR" }
+                : localDisplay(e.local_total_compensation, e.total_compensation, e.currency, e.fx_rate_used);
+            return {
+                employee_id: e.employee_id, name: e.name, position: e.position_title || "", company: e.banner_name || "",
+                function: e.function_name || "", country: e.country || "", status: e.status,
+                total_compensation: comp.value ?? "", currency: comp.value == null ? "" : comp.currency,
+                latest_grade: e.latest_grade || "", team_size: e.team_size,
+                hire_date: e.hire_date || "",
+            };
+        });
         const csv = Papa.unparse(rows);
         downloadText(csv, `employees-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv");
     }
@@ -88,7 +102,15 @@ export function EmployeeToolbar({ employees, offices, positions, functions }: { 
             <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Employee</Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4" /> Import CSV</Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setProfileImportOpen(true)}><FileSpreadsheet className="h-4 w-4" /> Import Profile (Excel)</Button>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={exportCsv}><Download className="h-4 w-4" /> Export CSV</Button>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" className="gap-1.5"><Download className="h-4 w-4" /> Export CSV <ChevronDown className="h-3 w-3 opacity-60" /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => exportCsv("local")}>As Local currency <span className="ml-1 text-xs text-slate-400">(each person's own)</span></DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => exportCsv("eur")}>As EUR</DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" variant="ghost" className="gap-1.5 text-slate-500" onClick={downloadTemplate}><FileText className="h-4 w-4" /> Template</Button>
 
             <AddEmployeeWizard open={addOpen} onOpenChange={setAddOpen} offices={offices} positions={positions} functions={functions} employees={employees} />

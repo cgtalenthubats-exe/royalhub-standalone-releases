@@ -1,10 +1,16 @@
 import type { EmployeeDetail } from "@/app/actions/employees";
-import { formatCurrency, formatDate, formatYears, compensationOnly } from "@/lib/format";
+import { formatCurrency, formatDate, formatYears, compensationOnly, localDisplay } from "@/lib/format";
 
 const FYS = [2021, 2022, 2023, 2024, 2025];
 
 // Build a standalone, self-contained HTML document the user can open/present directly (D6).
-export function buildComparisonHtml(details: EmployeeDetail[], compOnly: boolean): string {
+// currencyMode mirrors the on-screen Local/EUR toggle for the per-field table
+// below - "local" shows each person in whatever currency they were entered in
+// (so two rows side by side can be in different currencies), "eur" forces
+// everyone to the same unit. The bar chart always stays EUR regardless,
+// same as the on-screen one - ranking/averaging mixed currencies side by
+// side isn't meaningful.
+export function buildComparisonHtml(details: EmployeeDetail[], compOnly: boolean, currencyMode: "local" | "eur" = "eur"): string {
     const esc = (s: any) => String(s ?? "-").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
     const names = details.map((d) => `<th>${esc(d.name)}</th>`).join("");
 
@@ -25,14 +31,21 @@ export function buildComparisonHtml(details: EmployeeDetail[], compOnly: boolean
         ["Years in Position", (d) => formatYears(d.position_effective_date)],
         ["Status", (d) => d.status],
     ];
+    const comp = (d: EmployeeDetail, eurValue: number | null | undefined, localValue: number | null | undefined): string => {
+        if (currencyMode === "eur") return formatCurrency(eurValue);
+        const currency = d.compensation?.currency ?? d.currency;
+        const fxRateUsed = d.compensation?.fx_rate_used ?? d.fx_rate_used;
+        const conv = localDisplay(localValue, eurValue, currency, fxRateUsed);
+        return formatCurrency(conv.value, conv.currency);
+    };
     const compRows: [string, (d: EmployeeDetail) => string][] = [
-        ["Total Compensation", (d) => formatCurrency(d.total_compensation)],
-        ["Base / Salary", (d) => formatCurrency(d.compensation?.base_salary)],
-        ["STI Target", (d) => formatCurrency(d.compensation?.sti_target)],
-        ["LTI Target", (d) => formatCurrency(d.compensation?.lti_target)],
-        ["Other Bonus", (d) => formatCurrency(d.compensation?.other_bonus)],
-        ["Allowance · Car", (d) => formatCurrency(d.compensation?.allowance_company_car)],
-        ["Benefit · Medical", (d) => formatCurrency(d.compensation?.allowance_private_medical)],
+        ["Total Compensation", (d) => comp(d, d.total_compensation, d.local_total_compensation)],
+        ["Base / Salary", (d) => comp(d, d.compensation?.base_salary, d.compensation?.local_values?.base_salary)],
+        ["STI Target", (d) => comp(d, d.compensation?.sti_target, d.compensation?.local_values?.sti_target)],
+        ["LTI Target", (d) => comp(d, d.compensation?.lti_target, d.compensation?.local_values?.lti_target)],
+        ["Other Bonus", (d) => comp(d, d.compensation?.other_bonus, d.compensation?.local_values?.other_bonus)],
+        ["Allowance · Car", (d) => comp(d, d.compensation?.allowance_company_car, d.compensation?.local_values?.allowance_company_car)],
+        ["Benefit · Medical", (d) => comp(d, d.compensation?.allowance_private_medical, d.compensation?.local_values?.allowance_private_medical)],
     ];
 
     const section = (title: string, rows: [string, (d: EmployeeDetail) => string][], mono = false) => `

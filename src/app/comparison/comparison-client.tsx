@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { formatCurrency, formatDate, formatYears, gradeColor, compensationOnly, yearsBetween, localDisplay } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Trophy, Clock, CalendarPlus, Users, Download, X, Plus, Printer, FileDown, Loader2 } from "lucide-react";
+import { Trophy, Clock, CalendarPlus, Users, Download, X, Plus, Printer, FileDown, Loader2, ChevronDown } from "lucide-react";
 import { buildComparisonHtml } from "./export-html";
 import { exportComparisonPptx } from "@/lib/pptx-export";
 import { EmployeeAvatar } from "@/components/employee-avatar";
 import { LocalEurToggle, type MoneyDisplayMode } from "@/components/ui/local-eur-toggle";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 const MAX = 5;
 
@@ -87,8 +88,12 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
         [allDetails, compOnly]
     );
 
-    function exportHtml() {
-        const html = buildComparisonHtml(allDetails, compOnly);
+    // Each export asks explicitly whether to render in Local or EUR, rather
+    // than silently following whatever the on-screen toggle happens to be
+    // set to right now - the exported file outlives this page view, so the
+    // choice needs to be made consciously at export time.
+    function exportHtml(currencyMode: "local" | "eur") {
+        const html = buildComparisonHtml(allDetails, compOnly, currencyMode);
         const blob = new Blob([html], { type: "text/html" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -98,8 +103,8 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
         URL.revokeObjectURL(url);
     }
 
-    function printPdf() {
-        const html = buildComparisonHtml(allDetails, compOnly);
+    function printPdf(currencyMode: "local" | "eur") {
+        const html = buildComparisonHtml(allDetails, compOnly, currencyMode);
         const w = window.open("", "_blank");
         if (!w) return;
         w.document.write(html);
@@ -109,9 +114,9 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
     }
 
     const [pptxLoading, setPptxLoading] = useState(false);
-    async function exportPptx() {
+    async function exportPptx(currencyMode: "local" | "eur") {
         setPptxLoading(true);
-        try { await exportComparisonPptx(allDetails, compOnly); toast.success("Exported PPTX 🎉"); }
+        try { await exportComparisonPptx(allDetails, compOnly, currencyMode); toast.success("Exported PPTX 🎉"); }
         catch (e: any) { toast.error("Export failed: " + (e?.message || "")); }
         finally { setPptxLoading(false); }
     }
@@ -128,15 +133,35 @@ export function ComparisonClient({ employees }: { employees: EmployeeListItem[] 
                 </div>
                 {details.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button size="sm" className="gap-1.5 bg-[#0b1f3a] hover:bg-[#0b1f3a]/90" disabled={pptxLoading} onClick={exportPptx}>
-                            {pptxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Export PPTX
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={printPdf}>
-                            <Printer className="h-3.5 w-3.5" /> Print / PDF
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportHtml}>
-                            <Download className="h-3.5 w-3.5" /> Export HTML
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button size="sm" className="gap-1.5 bg-[#0b1f3a] hover:bg-[#0b1f3a]/90" disabled={pptxLoading}>
+                                    {pptxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Export PPTX <ChevronDown className="h-3 w-3 opacity-60" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={() => exportPptx("local")}>As Local currency <span className="ml-1 text-xs text-slate-400">(each person's own)</span></DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => exportPptx("eur")}>As EUR</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="outline" className="gap-1.5"><Printer className="h-3.5 w-3.5" /> Print / PDF <ChevronDown className="h-3 w-3 opacity-60" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={() => printPdf("local")}>As Local currency <span className="ml-1 text-xs text-slate-400">(each person's own)</span></DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => printPdf("eur")}>As EUR</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="outline" className="gap-1.5"><Download className="h-3.5 w-3.5" /> Export HTML <ChevronDown className="h-3 w-3 opacity-60" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={() => exportHtml("local")}>As Local currency <span className="ml-1 text-xs text-slate-400">(each person's own)</span></DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => exportHtml("eur")}>As EUR</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 )}
             </div>

@@ -4,7 +4,7 @@ import type { OrgFlatNode } from "@/app/actions/org";
 import type { EmployeeDetail } from "@/app/actions/employees";
 import type { SalaryReviewColumn } from "@/app/actions/proposals";
 import type { IcpdData } from "@/app/actions/icpd";
-import { formatCurrency, formatDate, formatYears, compensationOnly, yearsBetween, calcAge } from "@/lib/format";
+import { formatCurrency, formatDate, formatYears, compensationOnly, yearsBetween, calcAge, localDisplay } from "@/lib/format";
 import { fetchImageAsDataUri } from "@/app/actions/photo";
 import { tagColorHex } from "@/lib/tag-colors";
 
@@ -464,7 +464,12 @@ function slug(s: string): string {
 }
 
 // ---------------- COMPARISON ----------------
-export async function exportComparisonPptx(details: EmployeeDetail[], compOnly: boolean) {
+// currencyMode mirrors the Comparison page's own Local/EUR toggle - "local"
+// renders each person's detail slide in whatever currency they were entered
+// in, "eur" forces everyone to the same unit. The overview bar chart always
+// stays EUR regardless, same as the on-screen bar chart and badge - ranking
+// people against each other in mixed currencies isn't meaningful.
+export async function exportComparisonPptx(details: EmployeeDetail[], compOnly: boolean, currencyMode: "local" | "eur" = "eur") {
     const Pptx = (await import("pptxgenjs")).default;
     const pptx = new Pptx();
     pptx.layout = "LAYOUT_WIDE";
@@ -504,6 +509,13 @@ export async function exportComparisonPptx(details: EmployeeDetail[], compOnly: 
         chrome(ds, "Compensation Review", d.name, `${d.position_title || ""} · ${d.banner_name || ""} · ${d.country || ""}`, "");
 
         const c = d.compensation;
+        const comp = (eurValue: number | null | undefined, localValue: number | null | undefined): string => {
+            if (currencyMode === "eur") return formatCurrency(eurValue);
+            const currency = c?.currency ?? d.currency;
+            const fxRateUsed = c?.fx_rate_used ?? d.fx_rate_used;
+            const conv = localDisplay(localValue, eurValue, currency, fxRateUsed);
+            return formatCurrency(conv.value, conv.currency);
+        };
         const left = [
             ["Date of Birth", formatDate(d.date_of_birth)],
             ["Hire Date", formatDate(d.hire_date)],
@@ -513,12 +525,12 @@ export async function exportComparisonPptx(details: EmployeeDetail[], compOnly: 
             ["Team Size", String(d.team_size)],
         ];
         const right = [
-            ["Total Compensation", formatCurrency(d.total_compensation)],
-            ["Base / Salary", formatCurrency(c?.base_salary)],
-            ["STI Target", formatCurrency(c?.sti_target)],
-            ["LTI Target", formatCurrency(c?.lti_target)],
-            ["Other Bonus", formatCurrency(c?.other_bonus)],
-            ["Medical", formatCurrency(c?.allowance_private_medical)],
+            ["Total Compensation", comp(d.total_compensation, d.local_total_compensation)],
+            ["Base / Salary", comp(c?.base_salary, c?.local_values?.base_salary)],
+            ["STI Target", comp(c?.sti_target, c?.local_values?.sti_target)],
+            ["LTI Target", comp(c?.lti_target, c?.local_values?.lti_target)],
+            ["Other Bonus", comp(c?.other_bonus, c?.local_values?.other_bonus)],
+            ["Medical", comp(c?.allowance_private_medical, c?.local_values?.allowance_private_medical)],
         ];
         const p1 = panel(ds, MARGIN, 1.45, 6.05, 3.7, "Personal & Employment");
         ds.addTable(left.map(([k, v], i) => [
